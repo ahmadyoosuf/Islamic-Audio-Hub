@@ -48,6 +48,7 @@ const generateTracks = (
   categoryName: string,
   count: number,
   titles: string[],
+  prizeEnabledIds: number[] = [],
 ): Track[] =>
   Array.from({ length: count }, (_, i) => ({
     id: `${categoryId}-${i + 1}`,
@@ -59,6 +60,7 @@ const generateTracks = (
     viewCount: Math.floor(Math.random() * 5000),
     isPremium: i > 2,
     sortOrder: i + 1,
+    prizeEnabled: prizeEnabledIds.includes(i + 1),
   }));
 
 export const TRACKS_BY_CATEGORY: Record<string, Track[]> = {
@@ -144,8 +146,9 @@ export const TRACKS_BY_CATEGORY: Record<string, Track[]> = {
   ]),
 };
 
-export const getAllTracks = (): Track[] =>
-  Object.values(TRACKS_BY_CATEGORY).flat();
+export const TRACKS: Track[] = Object.values(TRACKS_BY_CATEGORY).flat();
+
+export const getAllTracks = (): Track[] => TRACKS;
 
 export const getTracksByCategory = (categoryId: string): Track[] =>
   TRACKS_BY_CATEGORY[categoryId] ?? [];
@@ -209,6 +212,33 @@ export const QUIZ_QUESTIONS: Record<
       correctIndex: 1,
     },
   ],
+  "quran-2": [
+    {
+      question: "அல்-பகரா சூரா என்ன பொருள்?",
+      options: ["பசு", "ஆடு", "ஒட்டகம்"],
+      correctIndex: 0,
+    },
+    {
+      question: "குர்ஆனில் மிக நீளமான சூரா எது?",
+      options: ["அல்-இம்ரான்", "அல்-பகரா", "யாஸீன்"],
+      correctIndex: 1,
+    },
+    {
+      question: "ஆயத்துல் குர்ஸி எந்த சூராவில் உள்ளது?",
+      options: ["அல்-ஃபாத்திஹா", "அல்-பகரா", "அல்-இம்ரான்"],
+      correctIndex: 1,
+    },
+    {
+      question: "குர்ஆனில் எத்தனை ஜுஸ்கள் உள்ளன?",
+      options: ["20", "30", "40"],
+      correctIndex: 1,
+    },
+    {
+      question: "குர்ஆன் எத்தனை ஆண்டுகளாக இறக்கியருளப்பட்டது?",
+      options: ["20", "23", "25"],
+      correctIndex: 1,
+    },
+  ],
   "hadith-1": [
     {
       question: "ஹதீஸ் என்பது என்ன?",
@@ -238,6 +268,114 @@ export const QUIZ_QUESTIONS: Record<
       question: "தினசரி தொழுகை எத்தனை நேரங்கள்?",
       options: ["3", "5", "7"],
       correctIndex: 1,
+    },
+  ],
+  "hadith-2": [
+    {
+      question: "நம்பிக்கை (ஈமான்) என்பதில் எத்தனை கட்டங்கள் உள்ளன?",
+      options: ["4", "6", "8"],
+      correctIndex: 1,
+    },
+    {
+      question: "இஸ்லாத்தில் ஷஹாதத்தின் பொருள் என்ன?",
+      options: ["நோன்பு", "சாட்சி", "தொழுகை"],
+      correctIndex: 1,
+    },
+    {
+      question: "ஈமானின் ஆறு தூண்களில் முதலாவது எது?",
+      options: ["தூதர்களில் நம்பிக்கை", "அல்லாஹ்வில் நம்பிக்கை", "வானவர்களில் நம்பிக்கை"],
+      correctIndex: 1,
+    },
+    {
+      question: "ஜிப்ரீல் ஹதீஸ் எதைப் பற்றி பேசுகிறது?",
+      options: ["ஹஜ்", "ஈமான், இஸ்லாம், இஹ்ஸான்", "ஜிஹாத்"],
+      correctIndex: 1,
+    },
+    {
+      question: "குஃப்ர் என்ன பொருள்?",
+      options: ["நம்பிக்கை", "நிராகரிப்பு", "வணக்கம்"],
+      correctIndex: 1,
+    },
+  ],
+  "iman-1": [
+    {
+      question: "தவ்ஹீத் என்ன பொருள்?",
+      options: ["பல தெய்வங்கள்", "ஒரே கடவுள்", "கடவுள் இல்லை"],
+      correctIndex: 1,
+    },
+    {
+      question: "அல்லாஹ்வின் 99 பெயர்களை என்ன அழைப்பர்?",
+      options: ["அஸ்மாவுல் ஹுஸ்னா", "அஸ்மாவுல் குர்ஆன்", "அஸ்மாவுல் நபி"],
+      correctIndex: 0,
+    },
+    {
+      question: "இஸ்லாமில் ஷிர்க் என்பது என்ன?",
+      options: ["நல்ல செயல்", "அல்லாஹ்விற்கு இணை வைத்தல்", "நோன்பு"],
+      correctIndex: 1,
+    },
+    {
+      question: "தவ்ஹீதின் வகைகள் எத்தனை?",
+      options: ["2", "3", "4"],
+      correctIndex: 1,
+    },
+    {
+      question: "ரூபூபிய்யா என்ன பொருள்?",
+      options: ["வணக்கம்", "இறையாண்மை", "பெயர்கள்"],
+      correctIndex: 1,
+    },
+  ],
+  "seerah-1": [
+    {
+      question: "நபி முஹம்மது (ஸல்) அவர்கள் எந்த நகரில் பிறந்தார்கள்?",
+      options: ["மதீனா", "மக்கா", "தாயிஃப்"],
+      correctIndex: 1,
+    },
+    {
+      question: "நபி (ஸல்) எந்த ஆண்டில் பிறந்தார்கள்?",
+      options: ["570 CE", "610 CE", "580 CE"],
+      correctIndex: 0,
+    },
+    {
+      question: "நபி (ஸல்) அவர்களின் தந்தையின் பெயர் என்ன?",
+      options: ["அபூ தாலிப்", "அப்துல்லாஹ்", "அப்துல் முத்தலிப்"],
+      correctIndex: 1,
+    },
+    {
+      question: "நபி (ஸல்) அவர்களின் தாயின் பெயர் என்ன?",
+      options: ["ஃபாத்திமா", "ஆமினா", "ஹலீமா"],
+      correctIndex: 1,
+    },
+    {
+      question: "வஹீ முதலில் எந்த சூராவிலிருந்து தொடங்கியது?",
+      options: ["அல்-ஃபாத்திஹா", "அல்-அலக்", "அல்-பகரா"],
+      correctIndex: 1,
+    },
+  ],
+  "daily-1": [
+    {
+      question: "காலையில் எழுந்திரிக்கும் போது என்ன துஆ படிக்க வேண்டும்?",
+      options: ["அல்ஹம்துலில்லாஹ்", "அல்ஹம்துலில்லாஹில்லதி அஹ்யானா", "பிஸ்மில்லாஹ்"],
+      correctIndex: 1,
+    },
+    {
+      question: "காலை நேரம் என்றால் எந்த நேரம்?",
+      options: ["மதியம்", "சூரியோதயத்திற்கு முன்", "மாலை"],
+      correctIndex: 1,
+    },
+    {
+      question: "காலை துஆவில் என்ன கேட்கப்படுகிறது?",
+      options: ["செல்வம்", "பாதுகாப்பு மற்றும் நன்மை", "வெற்றி"],
+      correctIndex: 1,
+    },
+    {
+      question: "ஃபஜ்ர் தொழுகை எந்த நேரத்தில்?",
+      options: ["மாலை", "நள்ளிரவு", "விடியலில்"],
+      correctIndex: 2,
+    },
+    {
+      question: "காலை ஆதினைகளில் (அஸ்கார்) படிக்க வேண்டியது எத்தனை முறை?",
+      options: ["3", "7", "33"],
+      correctIndex: 2,
     },
   ],
 };

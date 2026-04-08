@@ -1,11 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import React, { useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  Dimensions,
-  FlatList,
-  Image,
+  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,411 +10,375 @@ import {
   View,
   useColorScheme,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import AudioPlayer from "@/components/AudioPlayer";
-import TrackCard from "@/components/TrackCard";
-import { useApp } from "@/context/AppContext";
-import type { Track } from "@/context/AppContext";
-import {
-  CATEGORIES,
-  getLatestByCategory,
-  getMostPopular,
-  getTodaysFreeTrack,
-  TRACKS_BY_CATEGORY,
-} from "@/data/categories";
+import QuizModal from "@/components/QuizModal";
+import { useAudio } from "@/context/AudioContext";
+import { CATEGORIES, TRACKS } from "@/data/categories";
 import { useColors } from "@/hooks/useColors";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
-const CARD_WIDTH = 220;
+const TICKER_ITEMS = [
+  "بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ",
+  "குர்ஆன் விளக்கம்",
+  "ஹதீஸ் விளக்கம்",
+  "ஈமான் அடிப்படைகள்",
+  "அன்றாட வழிகாட்டி",
+  "Islamic Audio Learning",
+  "Daily Free Audio",
+];
 
-const CATEGORY_COLORS: Record<string, string> = {
-  quran: "#c8a84b",
+const CAT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  quran: "book",
+  hadith: "document-text",
+  iman: "heart",
+  seerah: "person",
+  daily: "sunny",
+};
+
+const CAT_COLORS: Record<string, string> = {
+  quran: "#f0bc42",
   hadith: "#4ade80",
   iman: "#60a5fa",
   seerah: "#f472b6",
   daily: "#fb923c",
 };
 
-const CATEGORY_ICONS: Record<string, string> = {
-  quran: "book",
-  hadith: "document-text",
-  iman: "heart",
-  seerah: "star",
-  daily: "sunny",
-};
+function TickerBanner({ isDark }: { isDark: boolean }) {
+  const scrollX = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.timing(scrollX, {
+        toValue: -500,
+        duration: 20000,
+        useNativeDriver: true,
+      }),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+  const fullText =
+    TICKER_ITEMS.join("   •   ") + "   •   " + TICKER_ITEMS.join("   •   ");
+  return (
+    <View
+      style={[styles.ticker, { backgroundColor: isDark ? "#141414" : "#f1f5f9" }]}
+    >
+      <Animated.View style={{ transform: [{ translateX: scrollX }] }}>
+        <Text style={[styles.tickerText, { color: isDark ? "#8a8070" : "#6b7280" }]}>
+          {fullText}
+        </Text>
+      </Animated.View>
+    </View>
+  );
+}
+
+function CategoryCard({
+  cat,
+  isDark,
+  onPress,
+}: {
+  cat: (typeof CATEGORIES)[0];
+  isDark: boolean;
+  onPress: () => void;
+}) {
+  const colors = useColors();
+  const color = CAT_COLORS[cat.id] ?? "#f0bc42";
+  const icon = CAT_ICONS[cat.id] ?? "musical-notes";
+  const trackCount = TRACKS.filter((t) => t.categoryId === cat.id).length;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[
+        styles.catCard,
+        {
+          backgroundColor: isDark ? "#0f0f0f" : "#ffffff",
+          borderColor: isDark ? "#1a1a1a" : "#e5e7eb",
+          borderLeftColor: color,
+          borderLeftWidth: 3,
+        },
+      ]}
+    >
+      <View style={[styles.catIconBg, { backgroundColor: color + "22" }]}>
+        <Ionicons name={icon} size={24} color={color} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.catName, { color: colors.foreground }]}>{cat.name}</Text>
+        <Text style={[styles.catMeta, { color: colors.mutedForeground }]}>
+          {trackCount} பாடங்கள்
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={color} />
+    </Pressable>
+  );
+}
+
+function TrackGridCard({ track, isDark }: { track: (typeof TRACKS)[0]; isDark: boolean }) {
+  const colors = useColors();
+  const cat = CATEGORIES.find((c) => c.id === track.categoryId);
+  const color = CAT_COLORS[track.categoryId] ?? "#f0bc42";
+  const { playTrack, currentTrack, isPlaying } = useAudio();
+  const isActive = currentTrack?.id === track.id;
+  const router = useRouter();
+  return (
+    <Pressable
+      onPress={() => router.push(`/audio/${track.id}` as any)}
+      style={[
+        styles.trackGridCard,
+        {
+          backgroundColor: isDark ? "#0f0f0f" : "#ffffff",
+          borderColor: isActive ? color : isDark ? "#1a1a1a" : "#e5e7eb",
+          borderWidth: isActive ? 1.5 : 1,
+        },
+      ]}
+    >
+      <View style={[styles.trackGridTop, { backgroundColor: color + "22" }]}>
+        <Ionicons name={CAT_ICONS[track.categoryId] ?? "musical-notes"} size={26} color={color} />
+        {isActive && isPlaying && (
+          <View style={[styles.playingDot, { backgroundColor: color }]} />
+        )}
+      </View>
+      <View style={styles.trackGridBody}>
+        <Text style={[styles.trackGridCat, { color }]}>
+          {cat?.name?.split(" ")[0] ?? ""}
+        </Text>
+        <Text
+          style={[styles.trackGridTitle, { color: colors.foreground }]}
+          numberOfLines={2}
+        >
+          {track.title}
+        </Text>
+      </View>
+      <Pressable
+        onPress={() =>
+          playTrack(
+            track,
+            TRACKS.filter((t) => t.categoryId === track.categoryId),
+          )
+        }
+        style={[styles.trackGridPlay, { backgroundColor: color + "22" }]}
+      >
+        <Ionicons name={isActive && isPlaying ? "pause" : "play"} size={16} color={color} />
+      </Pressable>
+    </Pressable>
+  );
+}
 
 export default function HomeScreen() {
   const colors = useColors();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
-  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { recentTracks } = useApp();
-  const todaysFree = getTodaysFreeTrack();
-  const latestByCategory = getLatestByCategory();
-  const popular = getMostPopular().slice(0, 8);
+  const [popularActive, setPopularActive] = useState(false);
+  const [recentActive, setRecentActive] = useState(false);
+  const [quizTrackId, setQuizTrackId] = useState<string | null>(null);
 
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const botPad = Platform.OS === "web" ? 34 + 84 : insets.bottom + 60;
+  const popularTracks = [...TRACKS]
+    .sort((a, b) => b.viewCount - a.viewCount)
+    .slice(0, 10);
+  const recentTracks = [...TRACKS].slice(-10).reverse();
+  const showList = popularActive || recentActive;
+  const displayTracks = recentActive ? recentTracks : popularTracks;
+
+  const togglePopular = () => {
+    setPopularActive((p) => !p);
+    setRecentActive(false);
+  };
+  const toggleRecent = () => {
+    setRecentActive((r) => !r);
+    setPopularActive(false);
+  };
 
   return (
-    <View
-      style={[
-        styles.root,
-        { backgroundColor: isDark ? "#0f0f0f" : "#f8f9fa" },
-      ]}
+    <SafeAreaView
+      style={[styles.safeArea, { backgroundColor: isDark ? "#0a0a0a" : "#f6faf6" }]}
+      edges={["top"]}
     >
+      <View style={styles.header}>
+        <View>
+          <Text style={[styles.logo, { color: "#f0bc42" }]}>Islamic Audio Hub</Text>
+          <Text style={[styles.tagline, { color: colors.mutedForeground }]}>
+            செவிகள் சிறக்கட்டும்!
+          </Text>
+        </View>
+        <View style={[styles.headerBadge, { backgroundColor: "#f0bc4222" }]}>
+          <Ionicons name="headset" size={20} color="#f0bc42" />
+        </View>
+      </View>
+
+      <TickerBanner isDark={isDark} />
+
       <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={{
-          paddingTop: topPad,
-          paddingBottom: botPad + 80,
-        }}
+        style={{ flex: 1 }}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
-          <View>
-            <Text style={[styles.appName, { color: "#c8a84b" }]}>
-              Islamic Audio Hub
-            </Text>
-            <Text style={[styles.tagline, { color: colors.mutedForeground }]}>
-              செவிகள் சிறக்கட்டும்!
-            </Text>
-          </View>
-          <View style={styles.headerActions}>
-            <Ionicons name="search" size={24} color={colors.foreground} />
-          </View>
+        <View style={styles.catsSection}>
+          {CATEGORIES.map((cat) => (
+            <CategoryCard
+              key={cat.id}
+              cat={cat}
+              isDark={isDark}
+              onPress={() => router.push(`/category/${cat.id}` as any)}
+            />
+          ))}
         </View>
 
-        <View style={styles.heroBanner}>
-          <LinearGradient
-            colors={["#c8a84b22", "#c8a84b08", "transparent"]}
-            style={styles.heroGrad}
-          >
-            <View style={styles.heroContent}>
-              <Ionicons name="moon" size={48} color="#c8a84b" />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.heroTitle, { color: colors.foreground }]}>
-                  தமிழ் இஸ்லாமிய கற்றல்
-                </Text>
-                <Text
-                  style={[styles.heroSub, { color: colors.mutedForeground }]}
-                >
-                  106 பாடங்கள் · 5 பிரிவுகள்
-                </Text>
-              </View>
-            </View>
-          </LinearGradient>
-        </View>
-
-        <Section title="பிரிவுகள்">
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoriesRow}
-          >
-            {CATEGORIES.map((cat) => {
-              const catColor = CATEGORY_COLORS[cat.id] ?? "#c8a84b";
-              const catIcon = CATEGORY_ICONS[cat.id] ?? "musical-notes";
-              return (
-                <Pressable
-                  key={cat.id}
-                  onPress={() => router.push(`/category/${cat.id}` as any)}
-                  style={({ pressed }) => [
-                    styles.categoryPill,
-                    {
-                      backgroundColor: catColor + (isDark ? "22" : "18"),
-                      borderColor: catColor,
-                      borderWidth: 1,
-                      opacity: pressed ? 0.75 : 1,
-                    },
-                  ]}
-                >
-                  <Ionicons name={catIcon as any} size={18} color={catColor} />
-                  <View style={styles.categoryPillInfo}>
-                    <Text
-                      style={[styles.categoryPillName, { color: catColor }]}
-                    >
-                      {cat.name}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.categoryPillCount,
-                        { color: colors.mutedForeground },
-                      ]}
-                    >
-                      {cat.trackCount} பாடங்கள்
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </Section>
-
-        <Section title="இன்றைய இலவசம்">
+        <View style={styles.toggleRow}>
           <Pressable
-            onPress={() => router.push(`/audio/${todaysFree.id}` as any)}
-            style={({ pressed }) => [
-              styles.todayCard,
+            onPress={togglePopular}
+            style={[
+              styles.togglePill,
               {
-                backgroundColor: isDark ? "#1a1a1a" : "#ffffff",
-                borderColor: "#c8a84b",
-                opacity: pressed ? 0.9 : 1,
+                backgroundColor: popularActive ? "#f0bc42" : isDark ? "#141414" : "#ffffff",
+                borderColor: popularActive ? "#f0bc42" : isDark ? "#2a2a2a" : "#d1d5db",
               },
             ]}
           >
-            <LinearGradient
-              colors={["#c8a84b22", "transparent"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.todayGrad}
+            <Ionicons
+              name="flame"
+              size={14}
+              color={popularActive ? "#000" : colors.mutedForeground}
+            />
+            <Text
+              style={[
+                styles.pillText,
+                { color: popularActive ? "#000" : colors.mutedForeground },
+              ]}
             >
-              <View style={styles.todayContent}>
-                <View style={[styles.todayIcon, { backgroundColor: "#c8a84b33" }]}>
-                  <Ionicons name="gift" size={28} color="#c8a84b" />
-                </View>
-                <View style={styles.todayInfo}>
-                  <View style={styles.todayBadge}>
-                    <Text style={styles.todayBadgeText}>இலவசம்</Text>
-                  </View>
-                  <Text
-                    style={[styles.todayTitle, { color: colors.foreground }]}
-                    numberOfLines={2}
-                  >
-                    {todaysFree.title}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.todayCategory,
-                      { color: colors.mutedForeground },
-                    ]}
-                  >
-                    {todaysFree.categoryName}
-                  </Text>
-                </View>
-                <Ionicons name="play-circle" size={44} color="#c8a84b" />
-              </View>
-            </LinearGradient>
+              பிரபலமானவை
+            </Text>
           </Pressable>
-        </Section>
-
-        {recentTracks.length > 0 && (
-          <Section title="சமீபத்தில் கேட்டது">
-            <View style={styles.trackList}>
-              {recentTracks.slice(0, 5).map((track) => (
-                <TrackCard
-                  key={track.id}
-                  track={track}
-                  variant="compact"
-                  playlist={recentTracks}
-                />
-              ))}
-            </View>
-          </Section>
-        )}
-
-        <Section title="பிரிவுகளின் புதிய பாடங்கள்">
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.featuredRow}
+          <Pressable
+            onPress={toggleRecent}
+            style={[
+              styles.togglePill,
+              {
+                backgroundColor: recentActive ? "#f0bc42" : isDark ? "#141414" : "#ffffff",
+                borderColor: recentActive ? "#f0bc42" : isDark ? "#2a2a2a" : "#d1d5db",
+              },
+            ]}
           >
-            {latestByCategory.map(({ category, track }) => (
-              <TrackCard
-                key={track.id}
-                track={track}
-                variant="featured"
-                playlist={TRACKS_BY_CATEGORY[category.id]}
-              />
-            ))}
-          </ScrollView>
-        </Section>
+            <Ionicons
+              name="time"
+              size={14}
+              color={recentActive ? "#000" : colors.mutedForeground}
+            />
+            <Text
+              style={[
+                styles.pillText,
+                { color: recentActive ? "#000" : colors.mutedForeground },
+              ]}
+            >
+              சமீபத்தியவை
+            </Text>
+          </Pressable>
+        </View>
 
-        <Section title="பிரபலமான பாடங்கள்">
-          <View style={styles.trackList}>
-            {popular.map((track) => (
-              <TrackCard
-                key={track.id}
-                track={track}
-                variant="compact"
-                playlist={popular}
-              />
+        {showList && (
+          <View style={styles.trackGrid}>
+            {displayTracks.map((track) => (
+              <TrackGridCard key={track.id} track={track} isDark={isDark} />
             ))}
           </View>
-        </Section>
+        )}
+
+        <View style={{ height: 130 }} />
       </ScrollView>
 
-      <View
-        style={[
-          styles.playerBar,
-          { bottom: botPad - (Platform.OS === "web" ? 84 : 60) },
-        ]}
-      >
-        <AudioPlayer />
-      </View>
-    </View>
+      <AudioPlayer />
+
+      {quizTrackId && (
+        <QuizModal
+          visible
+          onClose={() => setQuizTrackId(null)}
+          trackId={quizTrackId}
+          trackTitle={TRACKS.find((t) => t.id === quizTrackId)?.title ?? ""}
+        />
+      )}
+    </SafeAreaView>
   );
 }
-
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  const colors = useColors();
-  return (
-    <View style={styles.section}>
-      <Text style={[styles.sectionTitle, { color: colors.foreground }]}>
-        {title}
-      </Text>
-      {children}
-    </View>
-  );
-}
-
-import { Platform } from "react-native";
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
-  scroll: {
-    flex: 1,
-  },
+  safeArea: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingBottom: 16,
-  },
-  appName: {
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  tagline: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-  headerActions: {
-    flexDirection: "row",
-    gap: 16,
-  },
-  heroBanner: {
-    marginHorizontal: 16,
-    borderRadius: 16,
-    overflow: "hidden",
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#c8a84b44",
-  },
-  heroGrad: {
-    padding: 20,
-  },
-  heroContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-  },
-  heroTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  heroSub: {
-    fontSize: 13,
-    marginTop: 4,
-  },
-  section: {
-    marginTop: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 12,
-    paddingHorizontal: 20,
-  },
-  categoriesRow: {
     paddingHorizontal: 16,
-    gap: 10,
-  },
-  categoryPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderRadius: 12,
-    paddingHorizontal: 14,
     paddingVertical: 12,
-    gap: 10,
-    minWidth: 160,
   },
-  categoryPillInfo: {
-    gap: 2,
-  },
-  categoryPillName: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  categoryPillCount: {
-    fontSize: 11,
-  },
-  todayCard: {
-    marginHorizontal: 16,
-    borderRadius: 16,
-    overflow: "hidden",
-    borderWidth: 1.5,
-  },
-  todayGrad: {
-    padding: 16,
-  },
-  todayContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 14,
-  },
-  todayIcon: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
+  logo: { fontSize: 18, fontWeight: "900", letterSpacing: -0.5 },
+  tagline: { fontSize: 11, marginTop: 2 },
+  headerBadge: {
+    width: 40,
+    height: 40,
     alignItems: "center",
     justifyContent: "center",
-    flexShrink: 0,
+    borderRadius: 20,
   },
-  todayInfo: {
-    flex: 1,
-    gap: 4,
+  ticker: {
+    paddingVertical: 8,
+    paddingHorizontal: 0,
+    overflow: "hidden",
+    height: 36,
   },
-  todayBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: "#c8a84b",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
+  tickerText: { fontSize: 12, lineHeight: 20 },
+  scrollContent: { paddingHorizontal: 16, paddingTop: 12 },
+  catsSection: { gap: 8, marginBottom: 16 },
+  catCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 14,
+    borderWidth: 1,
   },
-  todayBadgeText: {
+  catIconBg: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 22,
+  },
+  catName: { fontSize: 14, fontWeight: "700" },
+  catMeta: { fontSize: 12, marginTop: 2 },
+  toggleRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
+  togglePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderWidth: 1,
+    borderRadius: 20,
+  },
+  pillText: { fontSize: 13, fontWeight: "700" },
+  trackGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  trackGridCard: { width: "48%", borderWidth: 1, overflow: "hidden" },
+  trackGridTop: {
+    height: 70,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playingDot: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  trackGridBody: { padding: 10, gap: 4 },
+  trackGridCat: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#000",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
-  todayTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    lineHeight: 22,
-  },
-  todayCategory: {
-    fontSize: 12,
-  },
-  trackList: {
-    paddingHorizontal: 16,
-  },
-  featuredRow: {
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  playerBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
+  trackGridTitle: { fontSize: 13, fontWeight: "600", lineHeight: 19 },
+  trackGridPlay: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 36,
   },
 });

@@ -1,247 +1,221 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React from "react";
+import React, { useState } from "react";
 import {
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  useColorScheme,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import AudioPlayer from "@/components/AudioPlayer";
-import TrackCard from "@/components/TrackCard";
-import { CATEGORIES, TRACKS_BY_CATEGORY } from "@/data/categories";
+import GameLevelCard from "@/components/GameLevelCard";
+import GameWorldBackground from "@/components/GameWorldBackground";
+import { CATEGORIES, TRACKS } from "@/data/categories";
 import { useColors } from "@/hooks/useColors";
 
-const CATEGORY_COLORS: Record<string, string> = {
-  quran: "#c8a84b",
+const CAT_COLORS: Record<string, string> = {
+  quran: "#f0bc42",
   hadith: "#4ade80",
   iman: "#60a5fa",
   seerah: "#f472b6",
   daily: "#fb923c",
 };
 
-const CATEGORY_ICONS: Record<string, string> = {
+const CAT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   quran: "book",
   hadith: "document-text",
   iman: "heart",
-  seerah: "star",
+  seerah: "person",
   daily: "sunny",
 };
 
 export default function CategoryScreen() {
   const colors = useColors();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const catId = id ?? "";
-
-  const category = CATEGORIES.find((c) => c.id === catId);
-  const tracks = TRACKS_BY_CATEGORY[catId] ?? [];
-  const catColor = CATEGORY_COLORS[catId] ?? "#c8a84b";
-  const catIcon = CATEGORY_ICONS[catId] ?? "musical-notes";
-
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const botPad = Platform.OS === "web" ? 34 + 84 : insets.bottom + 60;
+  const router = useRouter();
+  const category = CATEGORIES.find((c) => c.id === id);
+  const tracks = TRACKS.filter((t) => t.categoryId === id);
+  const color = CAT_COLORS[id ?? ""] ?? "#f0bc42";
+  const icon = CAT_ICONS[id ?? ""] ?? "musical-notes";
+  const [visibleCount, setVisibleCount] = useState(15);
 
   if (!category) {
     return (
-      <View
-        style={[
-          styles.root,
-          { backgroundColor: isDark ? "#0f0f0f" : "#f8f9fa" },
-        ]}
-      >
-        <View style={[styles.header, { paddingTop: topPad + 16 }]}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color={colors.foreground} />
-          </Pressable>
-          <Text style={[styles.headerTitle, { color: colors.foreground }]}>
-            பிரிவு
-          </Text>
-        </View>
-        <View style={styles.empty}>
-          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-            பிரிவு கிடைக்கவில்லை
-          </Text>
-        </View>
+      <View style={[styles.container, { backgroundColor: "#0a0a0a" }]}>
+        <Text style={{ color: "#888", textAlign: "center", marginTop: 100 }}>
+          பிரிவு கிடைக்கவில்லை
+        </Text>
       </View>
     );
   }
 
+  const visibleTracks = tracks.slice(0, visibleCount);
+
   return (
-    <View
-      style={[
-        styles.root,
-        { backgroundColor: isDark ? "#0f0f0f" : "#f8f9fa" },
-      ]}
-    >
-      <ScrollView
-        contentContainerStyle={{
-          paddingTop: topPad + 16,
-          paddingBottom: botPad + 80,
-        }}
-        showsVerticalScrollIndicator={false}
-      >
+    <View style={[styles.container, { backgroundColor: "#0f0a2e" }]}>
+      <GameWorldBackground />
+      <SafeAreaView style={{ flex: 1 }} edges={["top"]}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color={colors.foreground} />
+            <Ionicons name="arrow-back" size={20} color="#fff" />
           </Pressable>
-          <View
-            style={[
-              styles.catIconBadge,
-              { backgroundColor: catColor + "22" },
-            ]}
-          >
-            <Ionicons name={catIcon as any} size={20} color={catColor} />
-          </View>
-          <View style={styles.headerInfo}>
-            <Text
-              style={[styles.headerTitle, { color: colors.foreground }]}
-              numberOfLines={1}
-            >
+          <View style={styles.headerCenter}>
+            <View style={[styles.catIconSmall, { backgroundColor: color + "33" }]}>
+              <Ionicons name={icon} size={18} color={color} />
+            </View>
+            <Text style={styles.headerTitle} numberOfLines={1}>
               {category.name}
             </Text>
-            <Text
-              style={[styles.headerCount, { color: colors.mutedForeground }]}
-            >
-              {tracks.length} பாடங்கள்
-            </Text>
+          </View>
+          <View style={[styles.trackCountBadge, { backgroundColor: color + "22", borderColor: color + "44" }]}>
+            <Text style={[styles.trackCountText, { color }]}>{tracks.length}</Text>
           </View>
         </View>
 
-        <View
-          style={[
-            styles.progressBanner,
-            { backgroundColor: isDark ? "#1a1a1a" : "#ffffff" },
-          ]}
+        <View style={[styles.progressRow, { backgroundColor: "#ffffff11" }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.progressLabel}>நிலைகள் (Levels)</Text>
+            <Text style={[styles.progressValue, { color }]}>
+              {tracks.length} பாடங்கள் இங்கு உள்ளன
+            </Text>
+          </View>
+          <View style={[styles.progressBarContainer]}>
+            <View style={[styles.progressBarFill, { width: "70%", backgroundColor: color }]} />
+          </View>
+        </View>
+
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
         >
-          <View style={styles.progressBannerRow}>
-            <Text
-              style={[styles.progressLabel, { color: colors.mutedForeground }]}
-            >
-              முன்னேற்றம்
-            </Text>
-            <Text style={[styles.progressValue, { color: catColor }]}>
-              0 / {tracks.length}
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.progressTrack,
-              { backgroundColor: isDark ? "#2a2a2a" : "#e2e8f0" },
-            ]}
-          >
-            <View style={[styles.progressFill, { backgroundColor: catColor, width: "0%" }]} />
-          </View>
-        </View>
-
-        <View style={styles.trackList}>
-          {tracks.map((track, idx) => (
-            <TrackCard
+          {visibleTracks.map((track, i) => (
+            <GameLevelCard
               key={track.id}
               track={track}
-              variant="compact"
+              levelNumber={i + 1}
               playlist={tracks}
             />
           ))}
-        </View>
-      </ScrollView>
 
-      <View
-        style={[
-          styles.playerBar,
-          { bottom: botPad - (Platform.OS === "web" ? 84 : 60) },
-        ]}
-      >
+          {visibleCount < tracks.length && (
+            <Pressable
+              onPress={() => setVisibleCount((v) => v + 15)}
+              style={[styles.loadMore, { borderColor: color + "44" }]}
+            >
+              <Text style={[styles.loadMoreText, { color }]}>
+                மேலும் பாடங்கள் காண்க ({tracks.length - visibleCount} மீதி)
+              </Text>
+              <Ionicons name="chevron-down" size={16} color={color} />
+            </Pressable>
+          )}
+
+          <View style={{ height: 130 }} />
+        </ScrollView>
+
         <AudioPlayer />
-      </View>
+      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
+  container: {
     flex: 1,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingBottom: 16,
+    paddingVertical: 12,
     gap: 12,
   },
   backBtn: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: "#ffffff22",
+    borderRadius: 18,
   },
-  catIconBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerInfo: {
+  headerCenter: {
     flex: 1,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  headerCount: {
-    fontSize: 13,
-    marginTop: 2,
-  },
-  progressBanner: {
-    marginHorizontal: 16,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
     gap: 8,
   },
-  progressBannerRow: {
+  catIconSmall: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 15,
+  },
+  headerTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+    flex: 1,
+  },
+  trackCountBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderRadius: 12,
+  },
+  trackCountText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  progressRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginBottom: 12,
+    padding: 12,
+    gap: 12,
+    borderRadius: 4,
   },
   progressLabel: {
-    fontSize: 13,
-    fontWeight: "500",
+    color: "#ffffff88",
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   progressValue: {
     fontSize: 13,
     fontWeight: "700",
+    marginTop: 2,
   },
-  progressTrack: {
-    height: 6,
-    borderRadius: 3,
+  progressBarContainer: {
+    width: 60,
+    height: 4,
+    backgroundColor: "#ffffff22",
+    borderRadius: 2,
     overflow: "hidden",
   },
-  progressFill: {
-    height: 6,
-    borderRadius: 3,
+  progressBarFill: {
+    height: 4,
+    borderRadius: 2,
   },
-  trackList: {
+  listContent: {
     paddingHorizontal: 16,
   },
-  empty: {
-    flex: 1,
+  loadMore: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderWidth: 1,
+    marginTop: 4,
+    marginBottom: 8,
   },
-  emptyText: {
-    fontSize: 16,
-  },
-  playerBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
+  loadMoreText: {
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

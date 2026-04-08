@@ -255,6 +255,7 @@ export default function AudioDetailScreen() {
         onClose={() => setShowQuiz(false)}
         trackId={track.id}
         trackTitle={track.title}
+        prizeEnabled={track.prizeEnabled ?? false}
       />
     </View>
   );

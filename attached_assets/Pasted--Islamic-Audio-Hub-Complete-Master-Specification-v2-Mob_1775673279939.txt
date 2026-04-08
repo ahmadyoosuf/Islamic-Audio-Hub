@@ -1,0 +1,491 @@
+🎧 Islamic Audio Hub — Complete Master Specification v2
+Mobile App Recreation Prompt (Updated)
+1. PROJECT OVERVIEW
+App Name: Islamic Audio Hub
+Tagline: செவிகள் சிறக்கட்டும்! சிந்தனை மாறட்டும்! (Let ears flourish! Let thoughts change!)
+Purpose: A Tamil Islamic audio learning platform — Quran Tafsir, Hadith explanations, Seerah, and daily guidance in Tamil, presented as an audio streaming app with gamified quiz system.
+Target Audience: Tamil-speaking Muslims
+Language: UI is primarily in Tamil, with some English labels
+Theme: Dark theme by default (charcoal + gold/amber accent), with light theme (Islamic green) toggle
+Published URL: https://iah.lovable.app
+
+2. DATABASE SCHEMA
+2.1 categories
+CREATE TABLE categories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  type TEXT NOT NULL DEFAULT 'general',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_enabled BOOLEAN NOT NULL DEFAULT true,
+  thumbnail_url TEXT,
+  audio_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+Current 5 Categories (Tamil):
+
+#	Name	Track Count
+1	குர்ஆன் விளக்கம் (Quran Tafsir)	11
+2	ஹதீஸ் விளக்கம் (Hadith Explanation)	20
+3	ஈமான் அடிப்படைகள் (Faith Fundamentals)	37
+4	நபி வரலாறு (Prophet's History)	9
+5	அன்றாட வழிகாட்டி (Daily Guide)	29
+2.2 subcategories
+CREATE TABLE subcategories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  category_id UUID NOT NULL REFERENCES categories(id),
+  name TEXT NOT NULL,
+  description TEXT,
+  icon TEXT DEFAULT '📖',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  sort_order_start INTEGER NOT NULL,
+  sort_order_end INTEGER NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+Subcategories map tracks by sort_order range.
+
+2.3 tracks
+CREATE TABLE tracks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  category_id UUID REFERENCES categories(id),
+  title TEXT NOT NULL,
+  audio_url TEXT NOT NULL,
+  thumbnail_url TEXT,
+  template_id INTEGER DEFAULT floor(random()*4+1)::int,
+  view_count INTEGER NOT NULL DEFAULT 0,
+  is_premium BOOLEAN NOT NULL DEFAULT false,
+  is_daily_free BOOLEAN NOT NULL DEFAULT false,
+  free_date DATE,
+  duration INTEGER DEFAULT 0,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  transcript TEXT,
+  prize_enabled BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+2.4 track_segments
+CREATE TABLE track_segments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  track_id UUID NOT NULL REFERENCES tracks(id),
+  audio_url TEXT NOT NULL,
+  segment_order INTEGER NOT NULL DEFAULT 0,
+  duration INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+2.5 quiz_questions
+CREATE TABLE quiz_questions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  track_id UUID NOT NULL REFERENCES tracks(id),
+  question_number INTEGER NOT NULL,
+  question_text TEXT NOT NULL,
+  option_a TEXT NOT NULL,
+  option_b TEXT NOT NULL,
+  option_c TEXT NOT NULL,
+  correct_option TEXT NOT NULL,   -- 'அ', 'ஆ', or 'இ'
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+2.6 quiz_rewards
+CREATE TABLE quiz_rewards (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  track_id UUID NOT NULL REFERENCES tracks(id),
+  prize_category TEXT NOT NULL,
+  prize_group TEXT NOT NULL,      -- 'MEN', 'WOMEN', 'KIDS'
+  token TEXT NOT NULL UNIQUE,
+  score INTEGER NOT NULL DEFAULT 0,
+  total_questions INTEGER NOT NULL DEFAULT 0,
+  time_taken_seconds INTEGER NOT NULL DEFAULT 0,
+  is_winner BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+2.7 user_profiles
+CREATE TABLE user_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL UNIQUE,
+  is_premium BOOLEAN NOT NULL DEFAULT false,
+  premium_until TIMESTAMPTZ,
+  subscription_status TEXT NOT NULL DEFAULT 'free',
+  subscription_expiry_date TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+2.8 user_roles
+CREATE TYPE app_role AS ENUM ('admin', 'user');
+CREATE TABLE user_roles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  role app_role NOT NULL DEFAULT 'user',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, role)
+);
+2.9 favorites
+CREATE TABLE favorites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  track_id UUID NOT NULL REFERENCES tracks(id),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+2.10 playback_progress
+CREATE TABLE playback_progress (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  track_id UUID NOT NULL REFERENCES tracks(id),
+  progress_seconds NUMERIC NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(user_id, track_id)
+);
+2.11 audio_notes
+CREATE TABLE audio_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  track_id UUID NOT NULL REFERENCES tracks(id),
+  content TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+2.12 audio_requests
+CREATE TABLE audio_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  description TEXT,
+  category TEXT,
+  user_id UUID,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+2.13 comments
+CREATE TABLE comments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  track_id UUID REFERENCES tracks(id),
+  user_id UUID,
+  author_name TEXT,
+  content TEXT NOT NULL,
+  is_approved BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+2.14 payment_orders (Razorpay)
+CREATE TABLE payment_orders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  razorpay_order_id TEXT NOT NULL,
+  razorpay_payment_id TEXT,
+  razorpay_signature TEXT,
+  amount INTEGER NOT NULL,
+  currency TEXT DEFAULT 'INR',
+  type TEXT NOT NULL,
+  track_id UUID REFERENCES tracks(id),
+  status TEXT DEFAULT 'created',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+2.15 user_purchases
+CREATE TABLE user_purchases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL,
+  track_id UUID NOT NULL REFERENCES tracks(id),
+  amount_paid NUMERIC NOT NULL,
+  purchased_at TIMESTAMPTZ DEFAULT now()
+);
+2.16 daily_free_history
+CREATE TABLE daily_free_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  track_id UUID NOT NULL REFERENCES tracks(id),
+  free_date DATE NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+Database Functions
+-- Auto-create profile on signup
+CREATE FUNCTION handle_new_user() RETURNS trigger ...;
+
+-- Increment view count
+CREATE FUNCTION increment_view_count(track_id UUID) RETURNS void ...;
+
+-- Check user role
+CREATE FUNCTION has_role(_user_id UUID, _role app_role) RETURNS boolean ...;
+Storage Buckets
+audio (public) — Audio files
+thumbnails (public) — Track thumbnail images
+3. PAGES & NAVIGATION
+3.1 Navigation Structure
+Mobile: Fixed bottom navigation bar with 5 items:
+
+🏠 முகப்பு (Home) → /
+❤️ பிடித்தவை (Favorites) → /favorites
+👤 சுயவிவரம் (Profile) → /profile
+ℹ️ பற்றி (About) → /about
+✨ கோரிக்கை (Request) → Opens modal form
+Desktop: Top navigation bar with Logo (left) and menu links (right).
+
+3.2 Home Page (/) — UPDATED
+Layout order (top to bottom):
+
+Mobile Header: Logo + Theme Toggle (sticky)
+Scrolling Text Ticker: 5 small items auto-scrolling horizontally:
+بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ
+Quran Tafsir & Explanation
+Hadith Collection & Quiz
+Islamic Audio Learning
+Daily Free Audio
+Uses CSS scrollX keyframe animation (20s linear infinite loop)
+Compact section with py-2 padding
+Category List: Cards showing all categories (NO heading text)
+Desktop: 5-column grid, hover shows subcategory dropdown
+Mobile: Accordion-style cards with subcategory expand
+All cards have uniform fixed height (220px) on desktop
+Each card has category icon (dark/light variants), name, description
+Today's Free: Single highlighted free track
+Popular / Recent Toggle Buttons: (at bottom)
+Two rounded pill buttons: [ Popular ] [ Recent ]
+Toggle behavior: Click to open track list, click again to close
+Click outside: Closes the list automatically
+Track list shows as 2-column grid cards (not list)
+Each card shows: category name, track title, play indicator
+Smooth max-h transition animation on open/close
+Audio Player at bottom (above nav)
+3.3 Category/Browse Page (/browse?category={id}) — GAME STYLE UI
+Game World Background: Canvas-based animated scene with:
+Twinkling stars scattered across dark sky
+Glowing moon with soft animation
+Parallax-swaying trees at bottom
+Floating book icons
+Sparkle particles
+Deep navy/purple gradient (#0f0a2e → #1a1145 → #0d1b2a)
+Subcategory View: If category has subcategories, shows subcategory cards first
+Cards have icon, name, description, track count
+Glowing border on hover, staggered fade-in animation
+Track View (Game Level Grid):
+Each track = a "Level" (Level 1, Level 2, etc.)
+GameLevelCard design:
+Level badge with trophy icon
+Primary CTA: Large "Play Quiz" button (gradient, pulse animation on hover)
+Secondary: Small audio play icon
+Share icon
+Premium tracks show "Locked" state with lock icon
+Hover: scale up + glow effect
+Category Progress Bar: Shows quiz availability percentage
+Infinite scroll with "Load More" button
+3.4 Quiz Page (/quiz/:trackId) — Dedicated Route
+Deep linking supported — direct URL access works
+Blurred background showing track info
+QuizModal opens automatically
+Close behavior returns to previous page (preserves scroll position)
+3.5 Track Detail Page (/audio/{trackId} or /audio/{trackId}/{slug})
+Back button, thumbnail, track info
+Play button, Favorite ❤️, Share, Download icons on card
+Quiz Button: Yellow gradient animated pulse "🎯 கேள்வி-பதில் விளையாடு"
+Related tracks from same category
+Premium payment / Login modals as needed
+3.6 Other Pages
+/favorites — Grid of favorite tracks
+/profile — User info, subscription, stats
+/about — App intro, donation, contact
+/subscription — Subscription management
+/auth — Email signup/login
+/admin — Category/Track/Quiz CRUD
+Policy pages: /privacy-policy, /terms-and-conditions, /refund-policy, /shipping-policy
+/install — PWA installation guide
+4. AUDIO PLAYER SYSTEM
+4.1 Core Features
+Global persistent player across all pages
+Collapsed view: Thumbnail, title, play/pause, speed, share, quiz icon
+Expanded view (mobile): Full controls with seek bar, speed selector (0.5x–2x pills), prev/next, volume
+Default speed: 1.25x
+Background playback continues when tab is hidden
+Visibility handling resumes on tab return
+4.2 Queue & Autoplay
+Queue management (add/remove, visual badge)
+Playlist autoplay from category tracks
+Multi-segment sequential playback
+4.3 Playback Progress
+Saves every 10 seconds (DB if logged in, localStorage otherwise)
+5. PREMIUM/MONETIZATION SYSTEM
+5.1 Access Logic
+FREE if: track.is_premium === false OR track.is_daily_free === true
+UNLOCKED if: Gold Member OR purchased track
+LOCKED if: is_premium AND not Gold AND not purchased
+5.2 Payment (Razorpay)
+Single track: ₹29 | Gold subscription: ₹99/month
+QR code payment option for UPI
+Auto-play after successful payment with unlock animation
+5.3 Edge Functions
+razorpay-create-order
+razorpay-verify-payment
+razorpay-create-qr-order
+check-payment-status
+rotate-daily-free
+6. QUIZ GAME SYSTEM 🎯
+6.1 Entry Points
+Track Detail Page: Large yellow button
+Audio Player (mini): Quiz icon with yellow pulse dot
+Track Cards: "QUIZ" badge + quiz icon
+GameLevelCard: Primary "Play Quiz" button
+Direct URL: /quiz/:trackId
+6.2 Quiz UI (Full-Screen Game Modal)
+Gradient background (charcoal to card) with glow orbs
+Header: Track title + Level badge + Global timer + Close button (red glow, X icon)
+Close behavior:
+Click outside modal → closes
+Click X button → closes
+Press ESC → closes
+Returns to same page, preserves scroll position
+Answer buttons, audio player controls are "safe zones" (don't trigger close)
+6.3 Quiz-First Learning Flow
+User attempts quiz first
+"🎧 விளக்கம் கேளுங்கள்" (Audio Hint) button available
+When audio plays → quiz timer auto-pauses (both per-question and global)
+When audio stops → quiz auto-resumes
+Paused state shows overlay with headphones icon
+6.4 Question Screen
+Progress: "3 / 10" badge + gradient progress bar
+Streak counter: 🔥 streak at 2+ consecutive correct
+Score: ⭐ points display
+Per-question timer: 12 seconds countdown
+Global timer: 60 seconds for entire quiz
+Question card: Gradient background with bold Tamil text
+3 options: Tamil letters அ, ஆ, இ
+Correct: Green glow + bounce
+Wrong: Red + shake, correct shown
+Points popup: "+1" or "+2" floats up
+Auto-advance: 1.5s after answer
+6.5 Scoring
+Correct: +1 | Streak bonus (3+): +2
+Time up: 0 points, streak resets
+6.6 Prize/Reward System (Admin-Controlled)
+Admin toggle: prize_enabled field on tracks (ON/OFF)
+IF ON: Pre-quiz prize category selection screen:
+MEN: Casual Items, Accessories, Gadgets, Premium Gifts
+WOMEN: Beauty Items, Accessories, Personal Care, Premium Gifts
+KIDS: Toys, Creative Kits, Chocolates & Treats, Premium Gifts
+Complete quiz within time → generate unique token (e.g., MEN-A3X9K)
+Token stored in quiz_rewards table
+Winner screen shows token with copy button
+IF OFF: Normal quiz without prizes
+6.7 Result Screen
+Trophy with pulse animation
+Score: "X / 10" with star rating (0-3 stars)
+Performance message in Tamil
+Buttons: Play Again, Next Level, Close
+6.8 Level Progression
+Each track = 1 Level
+Auto-fetches next track's quiz in same category
+"All levels completed" message when done
+7. DESIGN SYSTEM
+7.1 Color Tokens (HSL)
+Dark Theme:
+
+--background: 0 0% 4%;
+--foreground: 45 10% 90%;
+--primary: 43 96% 56%;        /* Gold/Amber */
+--accent: 43 80% 45%;
+--card: 0 0% 6%;
+--border: 0 0% 14%;
+--radius: 0px;                /* Sharp corners */
+Light Theme:
+
+--background: 120 20% 97%;
+--primary: 150 60% 35%;       /* Islamic green */
+7.2 Typography
+Primary: Geist | Tamil: Noto Sans Tamil, Anek Tamil, Catamaran
+Arabic: font-arabic class for بِسْمِ ٱللَّٰهِ text
+7.3 Design Principles
+Sharp corners (border-radius: 0)
+Glassmorphism headers
+Gold accents on interactive elements
+Mobile-first responsive
+Game-style UI for subcategory/quiz pages
+7.4 Custom Animations
+/* Keyframes */
+scrollX: translateX(0) → translateX(-50%)     /* Ticker scroll */
+floatUp: translate(-50%,0) → translate(-50%,-60px)  /* Points popup */
+shake: translateX vibration                    /* Wrong answer */
+accordion-down/up: height transitions
+fade-in: opacity 0→1
+slide-up: translateY(100%)→0
+8. FEATURES SUMMARY
+User Features
+✅ Browse categories and subcategories
+✅ Game-style level cards for tracks
+✅ Play audio tracks (single + multi-segment)
+✅ Playback speed control (0.5x-2x)
+✅ Background audio playback
+✅ Playback progress save/resume
+✅ Queue management + Autoplay
+✅ Favorites (add/remove)
+✅ Take notes while listening
+✅ Share tracks (Web Share API + clipboard)
+✅ Search tracks
+✅ Daily free premium track
+✅ Quiz game: timer, streak, levels, prizes
+✅ Quiz-First learning (audio hint pauses quiz)
+✅ Prize selection + token rewards (admin-controlled)
+✅ Premium track purchase (₹29) + Gold subscription (₹99/month)
+✅ QR code payment
+✅ Homepage Popular/Recent toggle with grid cards
+✅ Theme toggle (dark/light)
+✅ PWA installable
+✅ Audio request form
+✅ Responsive (mobile + desktop)
+✅ Share & Quiz icons directly on track cards
+Admin Features
+✅ Category CRUD
+✅ Track CRUD + Bulk upload
+✅ Subcategory management
+✅ Bulk quiz upload (Tamil format parsing)
+✅ Prize enable/disable per track
+✅ Audio request management
+✅ Comment moderation
+9. ROUTING MAP
+/                          → Home page (ticker + categories + popular/recent)
+/auth                      → Login/Signup
+/browse?category={id}      → Game-style category with level cards
+/browse?category={id}&sub={subId} → Subcategory filtered tracks
+/audio/{trackId}           → Track detail
+/audio/{trackId}/{slug}    → Track detail (SEO-friendly)
+/quiz/{trackId}            → Dedicated quiz page (deep-linkable)
+/favorites                 → User favorites
+/profile                   → User profile
+/about                     → About + Contact + Donation
+/subscription              → Subscription management
+/admin                     → Admin panel
+/install                   → PWA install guide
+/privacy-policy            → Privacy Policy
+/terms-and-conditions      → Terms & Conditions
+/refund-policy             → Refund Policy
+/shipping-policy           → Shipping Policy
+10. SECURITY (RLS POLICIES)
+Tracks, Categories, Subcategories, Quiz Questions: Public read, Admin write
+Favorites, Notes, Progress, Purchases: Users own data only
+User Profiles: Own profile read/write
+User Roles: Admin manages, users read own
+Quiz Rewards: Users own data, Admin reads all
+Comments: Public read approved, Admin manages all
+Audio Requests: Anyone submits, Users see own, Admin sees all
+11. KEY TECHNICAL PATTERNS
+Audio Context (Global State)
+React Context wrapping entire app
+Single HTMLAudioElement instance
+Visibility change handling for background playback
+Track Access Control
+useTrackAccess hook: is_daily_free → is_premium → isGoldMember → hasPurchased
+States: 'free' | 'unlocked' | 'locked'
+Quiz Architecture
+useQuizQuestions(trackId) — Fetch quiz
+useQuizTrackIds() — All tracks with quizzes (badge display)
+useNextQuizTrack() — Next track with quiz in category
+QuizModal — Game container with close-on-outside-click
+QuizTimer — Countdown
+QuizOptionButton — Answer with animations
+QuizResultScreen — Score card
+PrizeSelectionScreen — Prize category picker
+WinnerTokenScreen — Token display
+Game World Background
+Canvas-based animated background for category pages
+Stars, moon, trees, books, sparkles
+Lightweight frame-based animation
+12. CONTACT INFO
+Email: support@islamicaudiohub.com
+Phone: +91 80156 44319
+This document (v2) contains the complete updated specification for recreating the Islamic Audio Hub. All database schemas, page designs, features, quiz logic, prize system, game UI, payment flows, and design tokens are documented above.

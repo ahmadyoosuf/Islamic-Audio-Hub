@@ -18,6 +18,7 @@ export interface Track {
   viewCount: number;
   isPremium: boolean;
   sortOrder: number;
+  prizeEnabled?: boolean;
 }
 
 export interface Category {

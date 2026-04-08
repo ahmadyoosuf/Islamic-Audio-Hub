@@ -1,0 +1,26 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "kBhucJ41EoiE1EYNUZa0V"
+uri = "file://artifacts/islamic-audio-hub/assets/images/icon.png"
+type = "image"
+title = "islamic audio hub app icon"
+
+[[generated]]
+id = "xHu3ls82-HkL4k3neC-dp"
+uri = "file://artifacts/islamic-audio-hub/assets/images/category-quran.png"
+type = "image"
+title = "quran tafsir category"
+
+[[generated]]
+id = "L8gmkwU_GxBk--wl3mdtg"
+uri = "file://artifacts/islamic-audio-hub/assets/images/category-hadith.png"
+type = "image"
+title = "hadith category"
+
+[[generated]]
+id = "nTnPzU2XgZk-305_NRo_r"
+uri = "file://artifacts/islamic-audio-hub/assets/images/category-iman.png"
+type = "image"
+title = "iman category"

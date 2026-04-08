@@ -16,6 +16,24 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
 
+## Artifacts
+
+### Islamic Audio Hub (`artifacts/islamic-audio-hub`)
+- **Type**: Expo mobile app
+- **Purpose**: Tamil Islamic audio learning platform
+- **Theme**: Dark charcoal + gold/amber accent, with system color scheme support
+- **Features**:
+  - 5 categories: Quran Tafsir, Hadith, Iman, Seerah, Daily Guide (106 tracks)
+  - Global audio player (mini + full modal) with playback speed control (0.5x–2x)
+  - Quiz system (Tamil MCQ with 3 options using Tamil letters அ/ஆ/இ)
+  - Favorites system (AsyncStorage)
+  - Playback progress tracking (AsyncStorage)
+  - Bottom navigation: Home, Favorites, Profile, About
+  - Category browse screen, Track detail screen
+  - React contexts: AppContext (favorites/progress/theme), AudioContext (audio playback)
+- **Key packages**: expo-av, expo-linear-gradient, @react-native-async-storage/async-storage
+- **Data**: Mock data in `data/categories.ts`
+
 ## Key Commands
 
 - `pnpm run typecheck` — full typecheck across all packages

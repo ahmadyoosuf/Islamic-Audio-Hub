@@ -1,18 +1,22 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
   useColorScheme,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { QUIZ_QUESTIONS } from "@/data/categories";
+import { useAudio } from "@/context/AudioContext";
+import { QUIZ_QUESTIONS, TRACKS } from "@/data/categories";
 import { useColors } from "@/hooks/useColors";
 
 interface QuizModalProps {
@@ -20,6 +24,7 @@ interface QuizModalProps {
   onClose: () => void;
   trackId: string;
   trackTitle: string;
+  categoryId?: string;
   prizeEnabled?: boolean;
 }
 
@@ -61,13 +66,25 @@ export default function QuizModal({
   onClose,
   trackId,
   trackTitle,
+  categoryId,
   prizeEnabled = false,
 }: QuizModalProps) {
   const colors = useColors();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { playTrack, isPlaying, currentTrack, pause } = useAudio();
   const questions = QUIZ_QUESTIONS[trackId] ?? [];
+
+  const currentTrackObj = TRACKS.find((t) => t.id === trackId);
+  const catId = categoryId ?? currentTrackObj?.categoryId ?? "";
+  const catTracks = TRACKS.filter((t) => t.categoryId === catId);
+  const currentIdx = catTracks.findIndex((t) => t.id === trackId);
+  const nextTrackWithQuiz = catTracks.slice(currentIdx + 1).find((t) => (QUIZ_QUESTIONS[t.id]?.length ?? 0) > 0);
+
+  const [hintPlaying, setHintPlaying] = useState(false);
+  const [timersPaused, setTimersPaused] = useState(false);
 
   type Phase = "prize-select" | "playing" | "result" | "winner";
   const [phase, setPhase] = useState<Phase>(prizeEnabled ? "prize-select" : "playing");
@@ -136,7 +153,44 @@ export default function QuizModal({
     setPerQTimer(PER_Q_SECS);
     setGlobalTimer(GLOBAL_SECS);
     setTotalTime(0);
+    setHintPlaying(false);
+    setTimersPaused(false);
     setPhase(prizeEnabled ? "prize-select" : "playing");
+  };
+
+  const handleAudioHint = async () => {
+    if (!currentTrackObj) return;
+    if (hintPlaying) {
+      pause();
+      setHintPlaying(false);
+      setTimersPaused(false);
+      startTimers();
+    } else {
+      stopTimers();
+      setTimersPaused(true);
+      setHintPlaying(true);
+      playTrack(currentTrackObj, catTracks);
+    }
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handleCopyToken = async () => {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (Platform.OS === "web") {
+      try {
+        await navigator.clipboard.writeText(token);
+      } catch {}
+    } else {
+      await Share.share({ message: `Islamic Audio Hub Quiz Token: ${token}` });
+    }
+  };
+
+  const handleNextLevel = () => {
+    if (nextTrackWithQuiz) {
+      handleReset();
+      router.push(`/quiz/${nextTrackWithQuiz.id}` as any);
+      onClose();
+    }
   };
 
   const handleClose = () => {
@@ -455,6 +509,22 @@ export default function QuizModal({
                   );
                 })}
               </View>
+
+              {timersPaused && (
+                <View style={styles.hintPausedBanner}>
+                  <Ionicons name="headset" size={18} color="#60a5fa" />
+                  <Text style={styles.hintPausedText}>
+                    கேட்கும் போது நேரம் நிறுத்தப்படும்
+                  </Text>
+                </View>
+              )}
+
+              <Pressable onPress={handleAudioHint} style={[styles.hintBtn, { borderColor: hintPlaying ? "#60a5fa" : "#333" }]}>
+                <Ionicons name={hintPlaying ? "pause-circle" : "headset"} size={18} color={hintPlaying ? "#60a5fa" : "#8a8070"} />
+                <Text style={[styles.hintBtnText, { color: hintPlaying ? "#60a5fa" : "#8a8070" }]}>
+                  {hintPlaying ? "நிறுத்து — நேரம் தொடரும்" : "🎧 விளக்கம் கேளுங்கள் (நேரம் நிறுத்தும்)"}
+                </Text>
+              </Pressable>
             </ScrollView>
           </>
         )}
@@ -484,10 +554,20 @@ export default function QuizModal({
                 <Ionicons name="refresh" size={16} color="#f0bc42" />
                 <Text style={[styles.resultBtnText, { color: "#f0bc42" }]}>மீண்டும்</Text>
               </Pressable>
-              <Pressable onPress={handleClose} style={[styles.resultBtn, { backgroundColor: "#f0bc42" }]}>
-                <Text style={[styles.resultBtnText, { color: "#000" }]}>முடிந்தது</Text>
-              </Pressable>
+              {nextTrackWithQuiz ? (
+                <Pressable onPress={handleNextLevel} style={[styles.resultBtn, { backgroundColor: "#f0bc42" }]}>
+                  <Text style={[styles.resultBtnText, { color: "#000" }]}>அடுத்த நிலை</Text>
+                  <Ionicons name="arrow-forward" size={16} color="#000" />
+                </Pressable>
+              ) : (
+                <Pressable onPress={handleClose} style={[styles.resultBtn, { backgroundColor: "#f0bc42" }]}>
+                  <Text style={[styles.resultBtnText, { color: "#000" }]}>முடிந்தது</Text>
+                </Pressable>
+              )}
             </View>
+            {!nextTrackWithQuiz && (
+              <Text style={[styles.allDoneText]}>🎉 அனைத்து நிலைகளும் முடிந்தது!</Text>
+            )}
           </View>
         )}
 
@@ -504,11 +584,15 @@ export default function QuizModal({
             <View style={styles.tokenBox}>
               <Text style={styles.tokenLabel}>உங்கள் தனி குறியீடு</Text>
               <Text style={styles.tokenText}>{token}</Text>
-              <Text style={{ color: "#888", fontSize: 12, textAlign: "center", marginTop: 4 }}>
+              <Pressable onPress={handleCopyToken} style={styles.copyBtn}>
+                <Ionicons name="copy-outline" size={16} color="#f0bc42" />
+                <Text style={styles.copyBtnText}>நகலெடு / பகிர்</Text>
+              </Pressable>
+              <Text style={{ color: "#888", fontSize: 11, textAlign: "center", marginTop: 6 }}>
                 இந்த குறியீட்டை சேமித்து வைக்கவும்
               </Text>
             </View>
-            <Pressable onPress={handleClose} style={[styles.startBtn, { backgroundColor: "#f0bc42", marginTop: 24 }]}>
+            <Pressable onPress={handleClose} style={[styles.startBtn, { backgroundColor: "#f0bc42", marginTop: 20 }]}>
               <Text style={styles.startBtnText}>முடிந்தது</Text>
             </Pressable>
           </View>
@@ -857,5 +941,60 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 16,
+  },
+  hintBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 14,
+    marginBottom: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderRadius: 2,
+  },
+  hintBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    flex: 1,
+  },
+  hintPausedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#1a2a3a",
+    borderWidth: 1,
+    borderColor: "#60a5fa44",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 10,
+    borderRadius: 2,
+  },
+  hintPausedText: {
+    color: "#60a5fa",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  copyBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderWidth: 1,
+    borderColor: "#f0bc4266",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 2,
+  },
+  copyBtnText: {
+    color: "#f0bc42",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  allDoneText: {
+    color: "#8a8070",
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 12,
   },
 });

@@ -22,6 +22,7 @@ interface AudioContextType {
   isExpanded: boolean;
   playTrack: (track: Track, playlist?: Track[]) => void;
   togglePlay: () => void;
+  pause: () => void;
   seekTo: (seconds: number) => void;
   setPlaybackRate: (rate: number) => void;
   playNext: () => void;
@@ -162,6 +163,11 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     }
   }, [isPlaying]);
 
+  const pause = useCallback(async () => {
+    if (!soundRef.current || !isPlaying) return;
+    await soundRef.current.pauseAsync();
+  }, [isPlaying]);
+
   const seekTo = useCallback(async (seconds: number) => {
     if (!soundRef.current) return;
     await soundRef.current.setPositionAsync(seconds * 1000);
@@ -221,6 +227,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         isExpanded,
         playTrack,
         togglePlay,
+        pause,
         seekTo,
         setPlaybackRate,
         playNext,

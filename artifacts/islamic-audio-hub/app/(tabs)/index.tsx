@@ -27,6 +27,112 @@ const TICKER_ITEMS = [
   "Daily Free Audio",
 ];
 
+function TodaysFreeTrack({ isDark }: { isDark: boolean }) {
+  const colors = useColors();
+  const { playTrack, currentTrack, isPlaying } = useAudio();
+  const router = useRouter();
+  const freeTrack = TRACKS.find((t) => !t.isPremium);
+  if (!freeTrack) return null;
+  const isActive = currentTrack?.id === freeTrack.id;
+
+  return (
+    <Pressable
+      onPress={() => router.push(`/audio/${freeTrack.id}` as any)}
+      style={[
+        todayStyles.card,
+        {
+          backgroundColor: isDark ? "#14140a" : "#fffbeb",
+          borderColor: isActive ? "#f0bc42" : "#f0bc4244",
+        },
+      ]}
+    >
+      <View style={todayStyles.badgeRow}>
+        <View style={[todayStyles.badge, { backgroundColor: "#f0bc42" }]}>
+          <Ionicons name="gift" size={11} color="#000" />
+          <Text style={todayStyles.badgeText}>இன்று இலவசம்</Text>
+        </View>
+      </View>
+      <View style={todayStyles.body}>
+        <View style={[todayStyles.icon, { backgroundColor: "#f0bc4222" }]}>
+          <Ionicons name="musical-notes" size={24} color="#f0bc42" />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[todayStyles.title, { color: colors.foreground }]} numberOfLines={2}>
+            {freeTrack.title}
+          </Text>
+          <Text style={[todayStyles.cat, { color: "#f0bc42" }]}>
+            {freeTrack.categoryName}
+          </Text>
+        </View>
+        <Pressable
+          onPress={() => playTrack(freeTrack, TRACKS.filter((t) => t.categoryId === freeTrack.categoryId))}
+          style={[todayStyles.playBtn, { backgroundColor: isActive && isPlaying ? "#f0bc42" : "#f0bc4222" }]}
+        >
+          <Ionicons name={isActive && isPlaying ? "pause" : "play"} size={18} color={isActive && isPlaying ? "#000" : "#f0bc42"} />
+        </Pressable>
+      </View>
+    </Pressable>
+  );
+}
+
+const todayStyles = StyleSheet.create({
+  card: {
+    borderWidth: 1,
+    marginBottom: 16,
+    overflow: "hidden",
+  },
+  badgeRow: {
+    flexDirection: "row",
+    paddingHorizontal: 12,
+    paddingTop: 10,
+  },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#000",
+  },
+  body: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 12,
+  },
+  icon: {
+    width: 48,
+    height: 48,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 24,
+  },
+  title: {
+    fontSize: 14,
+    fontWeight: "700",
+    lineHeight: 20,
+  },
+  cat: {
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 3,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  playBtn: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 20,
+  },
+});
+
 const CAT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   quran: "book",
   hadith: "document-text",
@@ -221,6 +327,8 @@ export default function HomeScreen() {
             />
           ))}
         </View>
+
+        <TodaysFreeTrack isDark={isDark} />
 
         <View style={styles.toggleRow}>
           <Pressable

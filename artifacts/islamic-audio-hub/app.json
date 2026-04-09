@@ -8,6 +8,9 @@
     "scheme": "islamic-audio-hub",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "updates": {
+      "enabled": false
+    },
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",

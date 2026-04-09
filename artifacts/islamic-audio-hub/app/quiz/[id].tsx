@@ -12,11 +12,13 @@ export default function QuizPage() {
 
   const handleClose = () => {
     setVisible(false);
-    if (router.canGoBack()) {
-      router.back();
-    } else {
-      router.replace("/");
-    }
+    setTimeout(() => {
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace("/");
+      }
+    }, 300);
   };
 
   if (!id || !track) return <View style={styles.bg} />;

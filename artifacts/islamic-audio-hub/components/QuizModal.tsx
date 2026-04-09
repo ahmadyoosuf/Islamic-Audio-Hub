@@ -305,7 +305,7 @@ export default function QuizModal({
 
   if (!q && phase === "playing") {
     return (
-      <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={visible} animationType="slide" statusBarTranslucent>
         <View style={[styles.container, { backgroundColor: "#0a0a0a", paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16 }]}>
           <Pressable onPress={handleClose} style={styles.closeBtn}>
             <Ionicons name="close" size={24} color="#888" />
@@ -322,7 +322,7 @@ export default function QuizModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
+    <Modal visible={visible} animationType="slide" onRequestClose={handleClose} statusBarTranslucent>
       <View style={[styles.container, { backgroundColor: "#0a0a0a", paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <View style={styles.glowOrb1} />
         <View style={styles.glowOrb2} />

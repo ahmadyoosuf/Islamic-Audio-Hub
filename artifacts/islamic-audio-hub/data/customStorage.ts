@@ -17,6 +17,7 @@ export interface CustomTrack {
 
 export interface CustomQuiz {
   id: string;
+  trackId?: string;
   categoryId: string;
   question: string;
   options: string[];
@@ -39,6 +40,15 @@ export async function saveCustomTrack(track: CustomTrack): Promise<void> {
   await AsyncStorage.setItem(CUSTOM_TRACKS_KEY, JSON.stringify(existing));
 }
 
+export async function updateCustomTrack(id: string, updates: Partial<CustomTrack>): Promise<void> {
+  const existing = await getCustomTracks();
+  const idx = existing.findIndex(t => t.id === id);
+  if (idx !== -1) {
+    existing[idx] = { ...existing[idx], ...updates };
+    await AsyncStorage.setItem(CUSTOM_TRACKS_KEY, JSON.stringify(existing));
+  }
+}
+
 export async function deleteCustomTrack(id: string): Promise<void> {
   const existing = await getCustomTracks();
   const filtered = existing.filter(t => t.id !== id);
@@ -54,10 +64,24 @@ export async function getCustomQuizzes(): Promise<CustomQuiz[]> {
   }
 }
 
+export async function getQuizzesByTrack(trackId: string): Promise<CustomQuiz[]> {
+  const all = await getCustomQuizzes();
+  return all.filter(q => q.trackId === trackId);
+}
+
 export async function saveCustomQuiz(quiz: CustomQuiz): Promise<void> {
   const existing = await getCustomQuizzes();
   existing.unshift(quiz);
   await AsyncStorage.setItem(CUSTOM_QUIZZES_KEY, JSON.stringify(existing));
+}
+
+export async function updateCustomQuiz(id: string, updates: Partial<CustomQuiz>): Promise<void> {
+  const existing = await getCustomQuizzes();
+  const idx = existing.findIndex(q => q.id === id);
+  if (idx !== -1) {
+    existing[idx] = { ...existing[idx], ...updates };
+    await AsyncStorage.setItem(CUSTOM_QUIZZES_KEY, JSON.stringify(existing));
+  }
 }
 
 export async function deleteCustomQuiz(id: string): Promise<void> {

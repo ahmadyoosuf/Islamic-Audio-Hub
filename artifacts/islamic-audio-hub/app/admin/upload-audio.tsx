@@ -10,16 +10,17 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import { saveCustomTrack } from '../../data/customStorage';
 import { CATEGORIES } from '../../data/categories';
 
 export default function UploadAudioScreen() {
   const router = useRouter();
+  const { preselectedCategory } = useLocalSearchParams<{ preselectedCategory?: string }>();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [categoryId, setCategoryId] = useState('quran');
+  const [categoryId, setCategoryId] = useState(preselectedCategory ?? 'quran');
   const [audioFile, setAudioFile] = useState<{ uri: string; name: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);

@@ -138,7 +138,14 @@ export async function getTracksByCategory(categoryId: string): Promise<UnifiedTr
   const all = await getAllTracks();
   return all
     .filter(t => t.categoryId === categoryId)
-    .sort((a, b) => (a.isBuiltIn === b.isBuiltIn ? a.sortOrder - b.sortOrder : a.isBuiltIn ? -1 : 1));
+    .sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+export async function batchUpdateSortOrder(updates: Array<{ id: string; sortOrder: number }>): Promise<void> {
+  const all = await getAllTracks();
+  const map = new Map(updates.map(u => [u.id, u.sortOrder]));
+  const updated = all.map(t => map.has(t.id) ? { ...t, sortOrder: map.get(t.id)! } : t);
+  await AsyncStorage.setItem(DB_TRACKS_KEY, JSON.stringify(updated));
 }
 
 export async function getTrackById(id: string): Promise<UnifiedTrack | null> {

@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
 import React, { useState, useCallback } from "react";
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,11 +11,10 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AudioPlayer from "@/components/AudioPlayer";
-import CustomTrackCard from "@/components/CustomTrackCard";
 import GameLevelCard from "@/components/GameLevelCard";
 import GameWorldBackground from "@/components/GameWorldBackground";
-import { CATEGORIES, TRACKS } from "@/data/categories";
-import { getCustomTracks, type CustomTrack } from "@/data/customStorage";
+import { CATEGORIES } from "@/data/categories";
+import { getTracksByCategory, type UnifiedTrack } from "@/data/unifiedStorage";
 import { useColors } from "@/hooks/useColors";
 import type { Track } from "@/context/AppContext";
 
@@ -34,17 +34,23 @@ const CAT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   daily: "sunny",
 };
 
-function customTrackToTrack(ct: CustomTrack): Track {
+function unifiedToTrack(u: UnifiedTrack): Track {
   return {
-    id: ct.id,
-    title: ct.title,
-    categoryId: ct.categoryId,
-    categoryName: ct.categoryName,
-    duration: ct.duration || 0,
-    audioUrl: ct.audioUri,
-    viewCount: 0,
-    isPremium: false,
-    sortOrder: 9999,
+    id: u.id,
+    title: u.title,
+    categoryId: u.categoryId,
+    categoryName: u.categoryName,
+    duration: u.duration,
+    audioUrl: u.audioUrl,
+    viewCount: u.viewCount,
+    isPremium: u.isPremium,
+    sortOrder: u.sortOrder,
+    prizeEnabled: u.prizeEnabled,
+    hasQuiz: u.hasQuiz,
+    isBuiltIn: u.isBuiltIn,
+    description: u.description,
+    fileName: u.fileName,
+    uploadedAt: u.uploadedAt,
   };
 }
 
@@ -53,17 +59,18 @@ export default function CategoryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const category = CATEGORIES.find((c) => c.id === id);
-  const tracks = TRACKS.filter((t) => t.categoryId === id);
   const color = CAT_COLORS[id ?? ""] ?? "#f0bc42";
   const icon = CAT_ICONS[id ?? ""] ?? "musical-notes";
   const [visibleCount, setVisibleCount] = useState(15);
-  const [customTracks, setCustomTracks] = useState<CustomTrack[]>([]);
+  const [tracks, setTracks] = useState<UnifiedTrack[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
-      getCustomTracks().then((all) => {
-        const filtered = all.filter((t) => t.categoryId === id);
-        setCustomTracks(filtered);
+      setLoading(true);
+      getTracksByCategory(id ?? "").then((result) => {
+        setTracks(result);
+        setLoading(false);
       });
     }, [id])
   );
@@ -78,10 +85,8 @@ export default function CategoryScreen() {
     );
   }
 
+  const playlist: Track[] = tracks.map(unifiedToTrack);
   const visibleTracks = tracks.slice(0, visibleCount);
-
-  const customAsTrack: Track[] = customTracks.map(customTrackToTrack);
-  const fullPlaylist: Track[] = [...tracks, ...customAsTrack];
 
   return (
     <View style={[styles.container, { backgroundColor: "#0f0a2e" }]}>
@@ -101,7 +106,7 @@ export default function CategoryScreen() {
           </View>
           <View style={[styles.trackCountBadge, { backgroundColor: color + "22", borderColor: color + "44" }]}>
             <Text style={[styles.trackCountText, { color }]}>
-              {tracks.length + customTracks.length}
+              {tracks.length}
             </Text>
           </View>
         </View>
@@ -110,7 +115,7 @@ export default function CategoryScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.progressLabel}>நிலைகள் (Levels)</Text>
             <Text style={[styles.progressValue, { color }]}>
-              {tracks.length + customTracks.length} பாடங்கள் இங்கு உள்ளன
+              {tracks.length} பாடங்கள் இங்கு உள்ளன
             </Text>
           </View>
           <View style={styles.progressBarContainer}>
@@ -118,57 +123,49 @@ export default function CategoryScreen() {
           </View>
         </View>
 
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        >
-          {visibleTracks.map((track, i) => (
-            <GameLevelCard
-              key={track.id}
-              track={track}
-              levelNumber={i + 1}
-              playlist={fullPlaylist}
-            />
-          ))}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={color} />
+          </View>
+        ) : (
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {visibleTracks.map((track, i) => (
+              <GameLevelCard
+                key={track.id}
+                track={unifiedToTrack(track)}
+                levelNumber={i + 1}
+                playlist={playlist}
+              />
+            ))}
 
-          {visibleCount < tracks.length && (
-            <Pressable
-              onPress={() => setVisibleCount((v) => v + 15)}
-              style={[styles.loadMore, { borderColor: color + "44" }]}
-            >
-              <Text style={[styles.loadMoreText, { color }]}>
-                மேலும் பாடங்கள் காண்க ({tracks.length - visibleCount} மீதி)
-              </Text>
-              <Ionicons name="chevron-down" size={16} color={color} />
-            </Pressable>
-          )}
+            {visibleCount < tracks.length && (
+              <Pressable
+                onPress={() => setVisibleCount((v) => v + 15)}
+                style={[styles.loadMore, { borderColor: color + "44" }]}
+              >
+                <Text style={[styles.loadMoreText, { color }]}>
+                  மேலும் பாடங்கள் காண்க ({tracks.length - visibleCount} மீதி)
+                </Text>
+                <Ionicons name="chevron-down" size={16} color={color} />
+              </Pressable>
+            )}
 
-          {customTracks.length > 0 && (
-            <View style={styles.uploadedSection}>
-              <View style={styles.uploadedHeader}>
-                <View style={[styles.uploadedBadge, { backgroundColor: color + "22" }]}>
-                  <Ionicons name="cloud-upload" size={14} color={color} />
-                  <Text style={[styles.uploadedBadgeText, { color }]}>
-                    Admin Upload ({customTracks.length})
-                  </Text>
-                </View>
+            {tracks.length === 0 && (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="musical-notes-outline" size={48} color={color + "66"} />
+                <Text style={[styles.emptyText, { color: "#888" }]}>
+                  இந்த பிரிவில் பாடங்கள் இல்லை
+                </Text>
               </View>
+            )}
 
-              {customAsTrack.map((track, i) => (
-                <CustomTrackCard
-                  key={track.id}
-                  track={track}
-                  levelNumber={tracks.length + i + 1}
-                  playlist={fullPlaylist}
-                  catColor={color}
-                />
-              ))}
-            </View>
-          )}
-
-          <View style={{ height: 130 }} />
-        </ScrollView>
+            <View style={{ height: 130 }} />
+          </ScrollView>
+        )}
 
         <AudioPlayer />
       </SafeAreaView>
@@ -200,95 +197,53 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   catIconSmall: {
-    width: 30,
-    height: 30,
+    width: 32,
+    height: 32,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 15,
+    borderRadius: 16,
   },
   headerTitle: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "800",
     flex: 1,
+    letterSpacing: -0.3,
   },
   trackCountBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 18,
     borderWidth: 1,
-    borderRadius: 12,
   },
-  trackCountText: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
+  trackCountText: { fontSize: 14, fontWeight: "800" },
   progressRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginHorizontal: 16,
-    marginBottom: 12,
-    padding: 12,
-    gap: 12,
-    borderRadius: 4,
-  },
-  progressLabel: {
-    color: "#ffffff88",
-    fontSize: 11,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  progressValue: {
-    fontSize: 13,
-    fontWeight: "700",
-    marginTop: 2,
-  },
-  progressBarContainer: {
-    width: 60,
-    height: 4,
-    backgroundColor: "#ffffff22",
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  progressBarFill: {
-    height: 4,
-    borderRadius: 2,
-  },
-  listContent: {
     paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 12,
   },
+  progressLabel: { color: "#aaa", fontSize: 10, fontWeight: "700", letterSpacing: 1, textTransform: "uppercase" },
+  progressValue: { fontSize: 13, fontWeight: "700", marginTop: 2 },
+  progressBarContainer: { width: 60, height: 4, backgroundColor: "#ffffff22", borderRadius: 2, overflow: "hidden" },
+  progressBarFill: { height: "100%", borderRadius: 2 },
+  listContent: { paddingHorizontal: 12, paddingTop: 8 },
   loadMore: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
     paddingVertical: 14,
-    borderWidth: 1,
     marginTop: 4,
-    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 8,
+    marginHorizontal: 4,
   },
-  loadMoreText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  uploadedSection: {
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  uploadedHeader: {
-    marginBottom: 10,
-  },
-  uploadedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  uploadedBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  loadMoreText: { fontSize: 13, fontWeight: "700" },
+  loadingContainer: { flex: 1, alignItems: "center", justifyContent: "center" },
+  emptyContainer: { alignItems: "center", justifyContent: "center", paddingVertical: 80, gap: 16 },
+  emptyText: { fontSize: 14 },
 });

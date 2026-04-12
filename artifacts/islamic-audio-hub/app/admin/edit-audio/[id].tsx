@@ -14,6 +14,17 @@ import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import { CATEGORIES } from '../../../data/categories';
+import {
+  getTrackById,
+  updateTrack,
+  deleteTrack,
+  getQuizzesByTrack,
+  saveQuiz,
+  updateQuiz,
+  deleteQuiz,
+  type UnifiedTrack,
+  type UnifiedQuiz,
+} from '../../../data/unifiedStorage';
 
 async function persistAudioFile(uri: string, fileName: string): Promise<string> {
   if (Platform.OS === 'web') return uri;
@@ -24,31 +35,18 @@ async function persistAudioFile(uri: string, fileName: string): Promise<string> 
     const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const destPath = dir + Date.now() + '_' + safeFileName;
     await FileSystem.copyAsync({ from: uri, to: destPath });
-    console.log('[EditAudio] Persisted to:', destPath);
     return destPath;
   } catch (err) {
     console.warn('[EditAudio] Using original URI:', err);
     return uri;
   }
 }
-import {
-  getCustomTracks,
-  updateCustomTrack,
-  deleteCustomTrack,
-  getQuizzesByTrack,
-  saveCustomQuiz,
-  updateCustomQuiz,
-  deleteCustomQuiz,
-  type CustomTrack,
-  type CustomQuiz,
-} from '../../../data/customStorage';
 
 interface QuizDraft {
   id?: string;
   question: string;
   options: [string, string, string];
   correctIndex: number;
-  isNew?: boolean;
   isEditing?: boolean;
 }
 
@@ -56,7 +54,7 @@ export default function EditAudioScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const [track, setTrack] = useState<CustomTrack | null>(null);
+  const [track, setTrack] = useState<UnifiedTrack | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState('quran');
@@ -78,8 +76,7 @@ export default function EditAudioScreen() {
   );
 
   async function loadData() {
-    const tracks = await getCustomTracks();
-    const found = tracks.find(t => t.id === id);
+    const found = await getTrackById(id ?? '');
     if (!found) return;
     setTrack(found);
     setTitle(found.title);
@@ -121,23 +118,21 @@ export default function EditAudioScreen() {
     setSaving(true);
     try {
       const selectedCat = CATEGORIES.find(c => c.id === categoryId);
-      const updates: Partial<CustomTrack> = {
+      const updates: Partial<UnifiedTrack> = {
         title: title.trim(),
         description: description.trim(),
         categoryId,
         categoryName: selectedCat?.name ?? categoryId,
+        isBuiltIn: false,
       };
       if (audioFile) {
         const persistedUri = await persistAudioFile(audioFile.uri, audioFile.name);
-        console.log('[EditAudio] Saved audio URI:', persistedUri);
-        updates.audioUri = persistedUri;
+        updates.audioUrl = persistedUri;
         updates.fileName = audioFile.name;
       }
-      await updateCustomTrack(id!, updates);
+      await updateTrack(id!, updates);
       setSaved(true);
-      setTimeout(() => {
-        setSaved(false);
-      }, 1800);
+      setTimeout(() => setSaved(false), 1800);
     } catch {
       Alert.alert('பிழை', 'சேமிக்க முடியவில்லை');
     } finally {
@@ -155,7 +150,7 @@ export default function EditAudioScreen() {
           text: 'நீக்கு',
           style: 'destructive',
           onPress: async () => {
-            await deleteCustomTrack(id!);
+            await deleteTrack(id!);
             router.back();
           },
         },
@@ -168,8 +163,8 @@ export default function EditAudioScreen() {
     if (newOpts.some(o => !o.trim())) { Alert.alert('தவறு', 'மூன்று விடைகளும் உள்ளிடுங்க'); return; }
     setSavingQuiz(true);
     try {
-      const quiz: CustomQuiz = {
-        id: `cq_${Date.now()}`,
+      const quiz: UnifiedQuiz = {
+        id: `q_${Date.now()}`,
         trackId: id!,
         categoryId,
         question: newQ.trim(),
@@ -177,7 +172,7 @@ export default function EditAudioScreen() {
         correctIndex: newCorrect,
         addedAt: Date.now(),
       };
-      await saveCustomQuiz(quiz);
+      await saveQuiz(quiz);
       setQuizzes(prev => [...prev, { id: quiz.id, question: quiz.question, options: newOpts, correctIndex: newCorrect }]);
       setNewQ('');
       setNewOpts(['', '', '']);
@@ -212,7 +207,7 @@ export default function EditAudioScreen() {
     if (!q.id || !q.question.trim()) return;
     if (q.options.some(o => !o.trim())) { Alert.alert('தவறு', 'மூன்று விடைகளும் உள்ளிடுங்க'); return; }
     try {
-      await updateCustomQuiz(q.id, {
+      await updateQuiz(q.id, {
         question: q.question.trim(),
         options: q.options.map(o => o.trim()),
         correctIndex: q.correctIndex,
@@ -231,7 +226,7 @@ export default function EditAudioScreen() {
         text: 'நீக்கு',
         style: 'destructive',
         onPress: async () => {
-          if (q.id) await deleteCustomQuiz(q.id);
+          if (q.id) await deleteQuiz(q.id);
           setQuizzes(prev => prev.filter((_, i) => i !== idx));
         },
       },
@@ -245,6 +240,8 @@ export default function EditAudioScreen() {
       </View>
     );
   }
+
+  const currentFileName = track.fileName ?? (track.isBuiltIn ? 'Built-in audio (online)' : 'No file');
 
   return (
     <View style={styles.screen}>
@@ -261,6 +258,14 @@ export default function EditAudioScreen() {
         {saved && (
           <View style={styles.savedBanner}>
             <Text style={styles.savedTxt}>✅ வெற்றிகரமாக சேமிக்கப்பட்டது!</Text>
+          </View>
+        )}
+
+        {track.isBuiltIn && (
+          <View style={styles.builtInNotice}>
+            <Text style={styles.builtInNoticeTxt}>
+              📚 Built-in track — எந்த field-ஐ வேண்டுமானாலும் edit பண்ணலாம்
+            </Text>
           </View>
         )}
 
@@ -315,7 +320,7 @@ export default function EditAudioScreen() {
             ) : (
               <View style={{ alignItems: 'center' }}>
                 <Text style={styles.fileIcon}>📁</Text>
-                <Text style={styles.fileHint}>தற்போது: {track.fileName}</Text>
+                <Text style={styles.fileHint}>தற்போது: {currentFileName}</Text>
                 <Text style={styles.fileChange}>புதிய file tap பண்ணி மாற்றுங்க</Text>
               </View>
             )}
@@ -343,10 +348,7 @@ export default function EditAudioScreen() {
           <View style={styles.quizHeader}>
             <Text style={styles.sectionLabel}>🎮 Quiz Questions ({quizzes.length})</Text>
             {!addingQuiz && (
-              <TouchableOpacity
-                style={styles.addQuizBtn}
-                onPress={() => setAddingQuiz(true)}
-              >
+              <TouchableOpacity style={styles.addQuizBtn} onPress={() => setAddingQuiz(true)}>
                 <Text style={styles.addQuizTxt}>+ சேர்</Text>
               </TouchableOpacity>
             )}
@@ -362,23 +364,15 @@ export default function EditAudioScreen() {
                       <View style={[styles.optBadge, oi === q.correctIndex && styles.optBadgeCorrect]}>
                         <Text style={styles.optBadgeTxt}>{String.fromCharCode(65 + oi)}</Text>
                       </View>
-                      <Text style={[styles.optTxt, oi === q.correctIndex && { color: '#4CAF50' }]}>
-                        {opt}
-                      </Text>
+                      <Text style={[styles.optTxt, oi === q.correctIndex && { color: '#4CAF50' }]}>{opt}</Text>
                       {oi === q.correctIndex && <Text style={styles.correctMark}>✓</Text>}
                     </View>
                   ))}
                   <View style={styles.quizActions}>
-                    <TouchableOpacity
-                      style={styles.quizEditBtn}
-                      onPress={() => toggleEditQuiz(qIdx)}
-                    >
+                    <TouchableOpacity style={styles.quizEditBtn} onPress={() => toggleEditQuiz(qIdx)}>
                       <Text style={styles.quizEditTxt}>✏️ Edit</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.quizDeleteBtn}
-                      onPress={() => handleDeleteQuiz(qIdx)}
-                    >
+                    <TouchableOpacity style={styles.quizDeleteBtn} onPress={() => handleDeleteQuiz(qIdx)}>
                       <Text style={styles.quizDeleteTxt}>🗑️ Delete</Text>
                     </TouchableOpacity>
                   </View>
@@ -414,16 +408,10 @@ export default function EditAudioScreen() {
                     </TouchableOpacity>
                   ))}
                   <View style={styles.quizActions}>
-                    <TouchableOpacity
-                      style={styles.quizSaveBtn}
-                      onPress={() => handleUpdateQuiz(qIdx)}
-                    >
+                    <TouchableOpacity style={styles.quizSaveBtn} onPress={() => handleUpdateQuiz(qIdx)}>
                       <Text style={styles.quizSaveTxt}>✅ சேமி</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.quizCancelBtn}
-                      onPress={() => toggleEditQuiz(qIdx)}
-                    >
+                    <TouchableOpacity style={styles.quizCancelBtn} onPress={() => toggleEditQuiz(qIdx)}>
                       <Text style={styles.quizCancelTxt}>ரத்து</Text>
                     </TouchableOpacity>
                   </View>
@@ -483,10 +471,7 @@ export default function EditAudioScreen() {
                     <Text style={styles.quizSaveTxt}>💾 Quiz சேமி</Text>
                   )}
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.quizCancelBtn}
-                  onPress={() => setAddingQuiz(false)}
-                >
+                <TouchableOpacity style={styles.quizCancelBtn} onPress={() => setAddingQuiz(false)}>
                   <Text style={styles.quizCancelTxt}>ரத்து</Text>
                 </TouchableOpacity>
               </View>
@@ -494,11 +479,7 @@ export default function EditAudioScreen() {
           )}
 
           {quizzes.length === 0 && !addingQuiz && (
-            <TouchableOpacity
-              style={styles.emptyQuiz}
-              onPress={() => setAddingQuiz(true)}
-              activeOpacity={0.7}
-            >
+            <TouchableOpacity style={styles.emptyQuiz} onPress={() => setAddingQuiz(true)} activeOpacity={0.7}>
               <Text style={styles.emptyQuizIcon}>🎮</Text>
               <Text style={styles.emptyQuizTxt}>இந்த audio-க்கு quiz சேர்க்க tap பண்ணுங்க</Text>
             </TouchableOpacity>
@@ -540,6 +521,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   savedTxt: { color: '#4CAF50', fontSize: 14, fontWeight: '700' },
+  builtInNotice: {
+    backgroundColor: '#0a0f2e',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#2196F333',
+  },
+  builtInNoticeTxt: { color: '#60a5fa', fontSize: 13 },
   sectionLabel: { color: '#f0bc42', fontSize: 15, fontWeight: '700', marginBottom: 10, marginTop: 4 },
   card: {
     backgroundColor: '#141414',
@@ -638,12 +628,8 @@ const styles = StyleSheet.create({
   },
   optRowCorrect: { backgroundColor: '#0a2010', borderColor: '#4CAF5044' },
   optBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#2a2a2a',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#2a2a2a', alignItems: 'center', justifyContent: 'center',
   },
   optBadgeCorrect: { backgroundColor: '#4CAF50' },
   optBadgeTxt: { color: '#fff', fontSize: 12, fontWeight: '700' },
@@ -651,64 +637,38 @@ const styles = StyleSheet.create({
   correctMark: { color: '#4CAF50', fontSize: 16, fontWeight: '700' },
   quizActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
   quizEditBtn: {
-    borderWidth: 1,
-    borderColor: '#f0bc4244',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderWidth: 1, borderColor: '#f0bc4244',
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6,
   },
   quizEditTxt: { color: '#f0bc42', fontSize: 12, fontWeight: '600' },
   quizDeleteBtn: {
-    borderWidth: 1,
-    borderColor: '#ff6b6b44',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderWidth: 1, borderColor: '#ff6b6b44',
+    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6,
   },
   quizDeleteTxt: { color: '#ff6b6b', fontSize: 12, fontWeight: '600' },
   quizSaveBtn: {
-    backgroundColor: '#4CAF50',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    flexDirection: 'row',
-    gap: 4,
-    alignItems: 'center',
+    backgroundColor: '#4CAF50', borderRadius: 8,
+    paddingHorizontal: 14, paddingVertical: 8,
+    flexDirection: 'row', gap: 4, alignItems: 'center',
   },
   quizSaveTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
   quizCancelBtn: {
-    backgroundColor: '#1e1e1e',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    backgroundColor: '#1e1e1e', borderRadius: 8,
+    paddingHorizontal: 14, paddingVertical: 8,
   },
   quizCancelTxt: { color: '#888', fontSize: 13 },
   editOptRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0e0e0e',
-    borderRadius: 8,
-    padding: 8,
-    marginBottom: 6,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#0e0e0e', borderRadius: 8,
+    padding: 8, marginBottom: 6, gap: 8,
+    borderWidth: 1, borderColor: '#2a2a2a',
   },
   editOptRowCorrect: { borderColor: '#4CAF50', backgroundColor: '#0a2010' },
-  editOptInput: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 14,
-    padding: 4,
-  },
+  editOptInput: { flex: 1, color: '#fff', fontSize: 14, padding: 4 },
   emptyQuiz: {
-    backgroundColor: '#141414',
-    borderRadius: 12,
-    padding: 28,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: '#2196F344',
+    backgroundColor: '#141414', borderRadius: 12,
+    padding: 28, alignItems: 'center',
+    borderWidth: 2, borderStyle: 'dashed', borderColor: '#2196F344',
   },
   emptyQuizIcon: { fontSize: 36, marginBottom: 8 },
   emptyQuizTxt: { color: '#555', fontSize: 14, textAlign: 'center' },

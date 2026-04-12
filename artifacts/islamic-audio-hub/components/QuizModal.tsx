@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAudio } from "@/context/AudioContext";
-import { QUIZ_QUESTIONS, TRACKS } from "@/data/categories";
+import { getQuizzesByTrack, getTracksByCategory, type UnifiedQuiz, type UnifiedTrack } from "@/data/unifiedStorage";
 import { useColors } from "@/hooks/useColors";
 
 interface QuizModalProps {
@@ -75,13 +75,24 @@ export default function QuizModal({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { playTrack, isPlaying, currentTrack, pause } = useAudio();
-  const questions = QUIZ_QUESTIONS[trackId] ?? [];
+  const [questions, setQuestions] = useState<UnifiedQuiz[]>([]);
+  const [catTracks, setCatTracks] = useState<UnifiedTrack[]>([]);
 
-  const currentTrackObj = TRACKS.find((t) => t.id === trackId);
-  const catId = categoryId ?? currentTrackObj?.categoryId ?? "";
-  const catTracks = TRACKS.filter((t) => t.categoryId === catId);
+  useEffect(() => {
+    if (trackId) {
+      getQuizzesByTrack(trackId).then(qs => setQuestions(qs));
+    }
+  }, [trackId]);
+
+  useEffect(() => {
+    const catId = categoryId ?? "";
+    if (catId) {
+      getTracksByCategory(catId).then(all => setCatTracks(all));
+    }
+  }, [categoryId]);
+
   const currentIdx = catTracks.findIndex((t) => t.id === trackId);
-  const nextTrackWithQuiz = catTracks.slice(currentIdx + 1).find((t) => (QUIZ_QUESTIONS[t.id]?.length ?? 0) > 0);
+  const nextTrackWithQuiz = catTracks.slice(currentIdx + 1).find((t) => t.hasQuiz === true);
 
   const [hintPlaying, setHintPlaying] = useState(false);
   const [timersPaused, setTimersPaused] = useState(false);

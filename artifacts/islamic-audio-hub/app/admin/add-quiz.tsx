@@ -10,7 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { saveCustomQuiz } from '../../data/customStorage';
+import { saveQuiz } from '../../data/unifiedStorage';
 import { CATEGORIES } from '../../data/categories';
 
 export default function AddQuizScreen() {
@@ -45,14 +45,15 @@ export default function AddQuizScreen() {
     setLoading(true);
     try {
       const quiz = {
-        id: `custom_quiz_${Date.now()}`,
+        id: `quiz_${Date.now()}`,
+        trackId: '',
         categoryId,
         question: question.trim(),
         options: options.map(o => o.trim()),
         correctIndex,
         addedAt: Date.now(),
       };
-      await saveCustomQuiz(quiz);
+      await saveQuiz(quiz);
       setSuccess(true);
       setTimeout(() => router.back(), 2000);
     } catch {

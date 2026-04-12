@@ -12,7 +12,6 @@ import {
 } from "react-native";
 import type { Track } from "@/context/AppContext";
 import { useAudio } from "@/context/AudioContext";
-import { QUIZ_QUESTIONS } from "@/data/categories";
 import { useColors } from "@/hooks/useColors";
 
 interface GameLevelCardProps {
@@ -42,7 +41,7 @@ export default function GameLevelCard({
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const isActive = currentTrack?.id === track.id;
   const catColor = CATEGORY_COLORS[track.categoryId] ?? "#f0bc42";
-  const hasQuiz = (QUIZ_QUESTIONS[track.id]?.length ?? 0) > 0;
+  const hasQuiz = track.hasQuiz === true;
   const isLocked = track.isPremium;
 
   const handlePressIn = () => {

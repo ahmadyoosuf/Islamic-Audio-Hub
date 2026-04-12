@@ -6,14 +6,15 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { CATEGORIES, TRACKS, type Track } from '../../../data/categories';
+import { CATEGORIES } from '../../../data/categories';
 import {
-  getCustomTracks,
-  deleteCustomTrack,
-  type CustomTrack,
-} from '../../../data/customStorage';
+  getTracksByCategory,
+  deleteTrack,
+  type UnifiedTrack,
+} from '../../../data/unifiedStorage';
 
 const CAT_COLORS: Record<string, string> = {
   quran: '#f0bc42',
@@ -28,30 +29,32 @@ export default function AdminCategoryScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const category = CATEGORIES.find(c => c.id === id);
   const color = CAT_COLORS[id ?? ''] ?? '#f0bc42';
-  const builtInTracks = TRACKS.filter(t => t.categoryId === id);
 
-  const [customTracks, setCustomTracks] = useState<CustomTrack[]>([]);
+  const [tracks, setTracks] = useState<UnifiedTrack[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
-      getCustomTracks().then(all => {
-        setCustomTracks(all.filter(t => t.categoryId === id));
+      setLoading(true);
+      getTracksByCategory(id ?? '').then(result => {
+        setTracks(result);
+        setLoading(false);
       });
     }, [id])
   );
 
-  function handleDelete(trackId: string, title: string) {
+  function handleDelete(track: UnifiedTrack) {
     Alert.alert(
       'நீக்கவா?',
-      `"${title}" audio-ஐ நீக்க விரும்புகிறீர்களா?`,
+      `"${track.title}" audio-ஐ நீக்க விரும்புகிறீர்களா?`,
       [
         { text: 'இல்லை', style: 'cancel' },
         {
           text: 'நீக்கு',
           style: 'destructive',
           onPress: async () => {
-            await deleteCustomTrack(trackId);
-            setCustomTracks(prev => prev.filter(t => t.id !== trackId));
+            await deleteTrack(track.id);
+            setTracks(prev => prev.filter(t => t.id !== track.id));
           },
         },
       ]
@@ -81,97 +84,76 @@ export default function AdminCategoryScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        {customTracks.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={[styles.sectionBadge, { backgroundColor: color + '22' }]}>
-                <Text style={[styles.sectionBadgeTxt, { color }]}>
-                  ⬆️ Uploaded — {customTracks.length} tracks
-                </Text>
-              </View>
-            </View>
-
-            {customTracks.map((track, i) => (
-              <View key={track.id} style={[styles.card, { borderLeftColor: color }]}>
-                <View style={styles.cardLeft}>
-                  <View style={[styles.numBox, { backgroundColor: color + '22' }]}>
-                    <Text style={[styles.numTxt, { color }]}>
-                      {builtInTracks.length + i + 1}
-                    </Text>
-                  </View>
-                  <View style={styles.cardInfo}>
-                    <Text style={styles.cardTitle} numberOfLines={1}>{track.title}</Text>
-                    <Text style={styles.cardMeta} numberOfLines={1}>
-                      {track.fileName}
-                      {track.description ? ` · ${track.description}` : ''}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.cardActions}>
-                  <TouchableOpacity
-                    style={[styles.actionBtn, { borderColor: color + '66' }]}
-                    onPress={() => handleEdit(track.id)}
-                  >
-                    <Text style={[styles.actionTxt, { color }]}>✏️ Edit</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.deleteBtn}
-                    onPress={() => handleDelete(track.id, track.title)}
-                  >
-                    <Text style={styles.deleteTxt}>🗑️</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <View style={[styles.sectionBadge, { backgroundColor: '#ffffff11' }]}>
-              <Text style={styles.sectionBadgeTxtGray}>
-                📚 Built-in — {builtInTracks.length} tracks
-              </Text>
-            </View>
+      {loading ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator size="large" color={color} />
+        </View>
+      ) : (
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+          <View style={[styles.statsBar, { borderColor: color + '33' }]}>
+            <Text style={[styles.statsTxt, { color }]}>
+              மொத்தம் {tracks.length} பாடங்கள்
+            </Text>
+            <Text style={styles.statsNote}>
+              {tracks.filter(t => t.hasQuiz).length} Quiz உள்ளன
+            </Text>
           </View>
 
-          {builtInTracks.map((track, i) => (
-            <View key={track.id} style={[styles.card, styles.cardBuiltIn]}>
+          {tracks.map((track, i) => (
+            <View key={track.id} style={[styles.card, { borderLeftColor: color }]}>
               <View style={styles.cardLeft}>
-                <View style={styles.numBoxGray}>
-                  <Text style={styles.numTxtGray}>{i + 1}</Text>
+                <View style={[styles.numBox, { backgroundColor: color + '22' }]}>
+                  <Text style={[styles.numTxt, { color }]}>{i + 1}</Text>
                 </View>
                 <View style={styles.cardInfo}>
-                  <Text style={styles.cardTitle} numberOfLines={1}>{track.title}</Text>
-                  <Text style={styles.cardMeta}>
-                    {track.duration ? `${track.duration} நிமிடம்` : 'Built-in track'}
-                    {track.hasQuiz ? ' · Quiz ✓' : ''}
+                  <View style={styles.titleRow}>
+                    <Text style={styles.cardTitle} numberOfLines={1}>{track.title}</Text>
+                    {track.hasQuiz && (
+                      <View style={[styles.quizBadge, { backgroundColor: color + '22' }]}>
+                        <Text style={[styles.quizBadgeTxt, { color }]}>Quiz</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.cardMeta} numberOfLines={1}>
+                    {track.isBuiltIn ? 'Built-in' : 'Admin Upload'}
+                    {track.fileName ? ` · ${track.fileName}` : ''}
+                    {track.description ? ` · ${track.description}` : ''}
                   </Text>
                 </View>
               </View>
-              <View style={styles.builtInTag}>
-                <Text style={styles.builtInTagTxt}>Built-in</Text>
+              <View style={styles.cardActions}>
+                <TouchableOpacity
+                  style={[styles.actionBtn, { borderColor: color + '66' }]}
+                  onPress={() => handleEdit(track.id)}
+                >
+                  <Text style={[styles.actionTxt, { color }]}>✏️ Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.deleteBtn}
+                  onPress={() => handleDelete(track)}
+                >
+                  <Text style={styles.deleteTxt}>🗑️</Text>
+                </TouchableOpacity>
               </View>
             </View>
           ))}
-        </View>
 
-        {customTracks.length === 0 && (
-          <TouchableOpacity
-            style={[styles.emptyAddCard, { borderColor: color + '44' }]}
-            onPress={handleAddNew}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.emptyAddIcon, { color }]}>+</Text>
-            <Text style={[styles.emptyAddTxt, { color }]}>
-              இந்த category-ல முதல் audio-ஐ சேர்க்கவும்
-            </Text>
-          </TouchableOpacity>
-        )}
+          {tracks.length === 0 && (
+            <TouchableOpacity
+              style={[styles.emptyAddCard, { borderColor: color + '44' }]}
+              onPress={handleAddNew}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.emptyAddIcon, { color }]}>+</Text>
+              <Text style={[styles.emptyAddTxt, { color }]}>
+                இந்த category-ல முதல் audio-ஐ சேர்க்கவும்
+              </Text>
+            </TouchableOpacity>
+          )}
 
-        <View style={{ height: 60 }} />
-      </ScrollView>
+          <View style={{ height: 60 }} />
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -191,96 +173,66 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   backTxt: { fontSize: 18, fontWeight: '600' },
   topTitle: { color: '#fff', fontSize: 16, fontWeight: '700', flex: 1, textAlign: 'center' },
-  addBtn: {
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-  },
+  addBtn: { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 7 },
   addBtnTxt: { color: '#000', fontSize: 13, fontWeight: '800' },
+  loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { flex: 1 },
-  scrollContent: { padding: 16 },
-  section: { marginBottom: 20 },
-  sectionHeader: { marginBottom: 10 },
-  sectionBadge: {
-    alignSelf: 'flex-start',
-    borderRadius: 20,
+  scrollContent: { padding: 16, gap: 10 },
+  statsBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
     paddingHorizontal: 14,
-    paddingVertical: 6,
-  },
-  sectionBadgeTxt: { fontSize: 13, fontWeight: '700' },
-  sectionBadgeTxtGray: { color: '#666', fontSize: 13, fontWeight: '600' },
-  card: {
-    backgroundColor: '#141414',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#1e1e1e',
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  statsTxt: { fontSize: 14, fontWeight: '700' },
+  statsNote: { color: '#777', fontSize: 12 },
+  card: {
+    backgroundColor: '#111',
+    borderRadius: 8,
     borderLeftWidth: 3,
-  },
-  cardBuiltIn: {
-    borderLeftColor: '#333',
+    padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
   },
-  cardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  numBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  numTxt: { fontSize: 14, fontWeight: '700' },
-  numBoxGray: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#222',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  numTxtGray: { color: '#555', fontSize: 14, fontWeight: '600' },
-  cardInfo: { flex: 1 },
-  cardTitle: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  cardMeta: { color: '#555', fontSize: 11, marginTop: 3 },
-  cardActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 10,
-  },
+  cardLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  numBox: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  numTxt: { fontSize: 13, fontWeight: '800' },
+  cardInfo: { flex: 1, gap: 3 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  cardTitle: { color: '#fff', fontSize: 14, fontWeight: '600', flex: 1 },
+  quizBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  quizBadgeTxt: { fontSize: 10, fontWeight: '700' },
+  cardMeta: { color: '#666', fontSize: 11 },
+  cardActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   actionBtn: {
     borderWidth: 1,
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderRadius: 6,
+    paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  actionTxt: { fontSize: 13, fontWeight: '600' },
+  actionTxt: { fontSize: 12, fontWeight: '700' },
   deleteBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    backgroundColor: '#200',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteTxt: { fontSize: 16 },
-  builtInTag: {
-    backgroundColor: '#1e1e1e',
+    backgroundColor: '#ff444422',
     borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
-  builtInTagTxt: { color: '#444', fontSize: 11 },
+  deleteTxt: { fontSize: 14 },
   emptyAddCard: {
-    borderWidth: 2,
+    borderWidth: 1,
     borderStyle: 'dashed',
-    borderRadius: 14,
-    padding: 32,
+    borderRadius: 12,
+    paddingVertical: 40,
     alignItems: 'center',
-    marginTop: 8,
+    gap: 10,
+    marginTop: 20,
   },
-  emptyAddIcon: { fontSize: 40, marginBottom: 8 },
-  emptyAddTxt: { fontSize: 15, fontWeight: '600', textAlign: 'center' },
+  emptyAddIcon: { fontSize: 36, fontWeight: '200' },
+  emptyAddTxt: { fontSize: 14, fontWeight: '600' },
 });

@@ -19,6 +19,11 @@ export interface Track {
   isPremium: boolean;
   sortOrder: number;
   prizeEnabled?: boolean;
+  hasQuiz?: boolean;
+  isBuiltIn?: boolean;
+  description?: string;
+  fileName?: string;
+  uploadedAt?: number;
 }
 
 export interface Category {

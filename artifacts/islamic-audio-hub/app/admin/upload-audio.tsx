@@ -13,7 +13,7 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
-import { saveCustomTrack } from '../../data/customStorage';
+import { addTrack } from '../../data/unifiedStorage';
 import { CATEGORIES } from '../../data/categories';
 
 async function persistAudioFile(uri: string, fileName: string): Promise<string> {
@@ -86,13 +86,18 @@ export default function UploadAudioScreen() {
         description: description.trim(),
         categoryId,
         categoryName: selectedCategory?.name || categoryId,
-        audioUri: persistedUri,
+        audioUrl: persistedUri,
         fileName: audioFile.name,
         uploadedAt: Date.now(),
         duration: 0,
+        viewCount: 0,
+        isPremium: false,
+        sortOrder: 9999,
+        hasQuiz: false,
+        isBuiltIn: false,
       };
 
-      await saveCustomTrack(track);
+      await addTrack(track);
       setSuccess(true);
 
       setTimeout(() => {

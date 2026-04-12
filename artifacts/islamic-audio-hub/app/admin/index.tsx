@@ -9,8 +9,8 @@ import {
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CATEGORIES, TRACKS } from '../../data/categories';
-import { getCustomTracks, getCustomQuizzes, type CustomTrack } from '../../data/customStorage';
+import { CATEGORIES } from '../../data/categories';
+import { getAllTracks, getAllQuizzes, getCategoryTrackCounts, type UnifiedTrack } from '../../data/unifiedStorage';
 
 const CAT_ICONS: Record<string, string> = {
   quran: '📖',
@@ -23,8 +23,9 @@ const CAT_ICONS: Record<string, string> = {
 export default function AdminDashboard() {
   const router = useRouter();
   const [adminEmail, setAdminEmail] = useState('');
-  const [customTracks, setCustomTracks] = useState<CustomTrack[]>([]);
+  const [totalTracks, setTotalTracks] = useState(0);
   const [quizCount, setQuizCount] = useState(0);
+  const [catCounts, setCatCounts] = useState<Record<string, number>>({});
 
   useEffect(() => { loadSession(); }, []);
 
@@ -45,9 +46,14 @@ export default function AdminDashboard() {
   }
 
   async function loadStats() {
-    const [tracks, quizzes] = await Promise.all([getCustomTracks(), getCustomQuizzes()]);
-    setCustomTracks(tracks);
+    const [tracks, quizzes, counts] = await Promise.all([
+      getAllTracks(),
+      getAllQuizzes(),
+      getCategoryTrackCounts(),
+    ]);
+    setTotalTracks(tracks.length);
     setQuizCount(quizzes.length);
+    setCatCounts(counts);
   }
 
   function handleLogout() {
@@ -67,8 +73,6 @@ export default function AdminDashboard() {
       ]
     );
   }
-
-  const totalTracks = TRACKS.length + customTracks.length;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -92,11 +96,7 @@ export default function AdminDashboard() {
           <Text style={styles.statLbl}>Total Tracks</Text>
         </View>
         <View style={[styles.statCard, { borderTopColor: '#9C27B0' }]}>
-          <Text style={[styles.statVal, { color: '#9C27B0' }]}>{customTracks.length}</Text>
-          <Text style={styles.statLbl}>Uploaded</Text>
-        </View>
-        <View style={[styles.statCard, { borderTopColor: '#2196F3' }]}>
-          <Text style={[styles.statVal, { color: '#2196F3' }]}>{quizCount}</Text>
+          <Text style={[styles.statVal, { color: '#9C27B0' }]}>{quizCount}</Text>
           <Text style={styles.statLbl}>Quizzes</Text>
         </View>
       </View>
@@ -105,9 +105,7 @@ export default function AdminDashboard() {
       <Text style={styles.sectionSub}>Category tap பண்ணி audio manage செய்யுங்க</Text>
 
       {CATEGORIES.map(cat => {
-        const builtInCount = TRACKS.filter(t => t.categoryId === cat.id).length;
-        const customCount = customTracks.filter(t => t.categoryId === cat.id).length;
-        const total = builtInCount + customCount;
+        const count = catCounts[cat.id] ?? 0;
         return (
           <TouchableOpacity
             key={cat.id}
@@ -120,14 +118,11 @@ export default function AdminDashboard() {
             </View>
             <View style={styles.catInfo}>
               <Text style={styles.catName}>{cat.name}</Text>
-              <Text style={styles.catMeta}>
-                {builtInCount} built-in
-                {customCount > 0 ? ` · ${customCount} uploaded` : ''}
-              </Text>
+              <Text style={styles.catMeta}>{count} பாடங்கள்</Text>
             </View>
             <View style={styles.catRight}>
               <View style={[styles.catBadge, { backgroundColor: cat.color + '22' }]}>
-                <Text style={[styles.catBadgeText, { color: cat.color }]}>{total}</Text>
+                <Text style={[styles.catBadgeText, { color: cat.color }]}>{count}</Text>
               </View>
               <Text style={styles.catArrow}>›</Text>
             </View>

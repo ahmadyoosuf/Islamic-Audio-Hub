@@ -31,8 +31,12 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
   - Bottom navigation: Home, Favorites, Profile, About
   - Category browse screen, Track detail screen
   - React contexts: AppContext (favorites/progress/theme), AudioContext (audio playback)
-- **Key packages**: expo-av, expo-linear-gradient, @react-native-async-storage/async-storage
-- **Data**: Mock data in `data/categories.ts`
+- **Key packages**: expo-av, expo-linear-gradient, @react-native-async-storage/async-storage, expo-document-picker
+- **Data architecture**: Unified storage (`data/unifiedStorage.ts`) is the single source of truth. Seeds 106 built-in tracks + quiz questions from `data/categories.ts` into AsyncStorage on first launch. All CRUD goes through unifiedStorage — no more direct imports of TRACKS/QUIZ_QUESTIONS in UI code.
+  - Storage keys: `db_tracks_v4`, `db_quizzes_v4`, `db_initialized_v4`
+  - Functions: `initDB`, `getAllTracks`, `getTracksByCategory`, `getTrackById`, `addTrack`, `updateTrack`, `deleteTrack`, `saveQuiz`, `updateQuiz`, `deleteQuiz`, `getQuizzesByTrack`, `getCategoryTrackCounts`
+- **Admin CMS**: `app/admin/` — login (`admin@example.com` / `123456`), category view with edit/delete on all tracks, upload audio, edit audio with quiz management
+- **5-tab nav**: Home, Favorites (பிடித்தவை), Profile (சுயவிவரம்), About (பற்றி), Request (கோரிக்கை — opens modal)
 
 ## Key Commands
 

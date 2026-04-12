@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Platform,
   Pressable,
@@ -12,6 +12,7 @@ import {
   Text,
   View,
   useColorScheme,
+  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AudioPlayer from "@/components/AudioPlayer";
@@ -19,7 +20,7 @@ import QuizModal from "@/components/QuizModal";
 import TrackCard from "@/components/TrackCard";
 import { useApp } from "@/context/AppContext";
 import { useAudio } from "@/context/AudioContext";
-import { QUIZ_QUESTIONS, TRACKS_BY_CATEGORY, getTrackById } from "@/data/categories";
+import { getTrackById, getTracksByCategory, type UnifiedTrack } from "@/data/unifiedStorage";
 import { useColors } from "@/hooks/useColors";
 
 function formatDuration(seconds: number): string {
@@ -47,16 +48,24 @@ export default function AudioDetailScreen() {
   const { playTrack, currentTrack, isPlaying, togglePlay, setIsExpanded } = useAudio();
   const { isFavorite, addFavorite, removeFavorite } = useApp();
   const [showQuiz, setShowQuiz] = useState(false);
+  const [track, setTrack] = useState<UnifiedTrack | null>(null);
+  const [catTracks, setCatTracks] = useState<UnifiedTrack[]>([]);
 
-  const track = getTrackById(id ?? "");
+  useEffect(() => {
+    if (!id) return;
+    getTrackById(id).then(t => {
+      setTrack(t);
+      if (t) {
+        getTracksByCategory(t.categoryId).then(all => setCatTracks(all));
+      }
+    });
+  }, [id]);
+
   const catColor = track ? (CATEGORY_COLORS[track.categoryId] ?? "#c8a84b") : "#c8a84b";
-  const related = track
-    ? (TRACKS_BY_CATEGORY[track.categoryId] ?? []).filter((t) => t.id !== track.id).slice(0, 5)
-    : [];
-  const catTracks = track ? TRACKS_BY_CATEGORY[track.categoryId] ?? [] : [];
+  const related = catTracks.filter((t) => t.id !== id).slice(0, 5);
   const isActive = currentTrack?.id === track?.id;
   const fav = track ? isFavorite(track.id) : false;
-  const hasQuiz = track ? (QUIZ_QUESTIONS[track.id]?.length ?? 0) > 0 : false;
+  const hasQuiz = track?.hasQuiz === true;
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const botPad = Platform.OS === "web" ? 34 + 84 : insets.bottom + 60;

@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { useRouter, useFocusEffect } from "expo-router";
+import React, { useRef, useState, useCallback, useEffect } from "react";
 import {
   Animated,
   Pressable,
@@ -14,7 +14,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AudioPlayer from "@/components/AudioPlayer";
 import QuizModal from "@/components/QuizModal";
 import { useAudio } from "@/context/AudioContext";
-import { CATEGORIES, TRACKS } from "@/data/categories";
+import { CATEGORIES } from "@/data/categories";
+import { getAllTracks } from "@/data/unifiedStorage";
+import type { UnifiedTrack } from "@/data/unifiedStorage";
 import { useColors } from "@/hooks/useColors";
 
 const TICKER_ITEMS = [
@@ -27,11 +29,11 @@ const TICKER_ITEMS = [
   "Daily Free Audio",
 ];
 
-function TodaysFreeTrack({ isDark }: { isDark: boolean }) {
+function TodaysFreeTrack({ isDark, tracks }: { isDark: boolean; tracks: UnifiedTrack[] }) {
   const colors = useColors();
   const { playTrack, currentTrack, isPlaying } = useAudio();
   const router = useRouter();
-  const freeTrack = TRACKS.find((t) => !t.isPremium);
+  const freeTrack = tracks.find((t) => !t.isPremium);
   if (!freeTrack) return null;
   const isActive = currentTrack?.id === freeTrack.id;
 
@@ -65,7 +67,7 @@ function TodaysFreeTrack({ isDark }: { isDark: boolean }) {
           </Text>
         </View>
         <Pressable
-          onPress={() => playTrack(freeTrack, TRACKS.filter((t) => t.categoryId === freeTrack.categoryId))}
+          onPress={() => playTrack(freeTrack, tracks.filter((t) => t.categoryId === freeTrack.categoryId))}
           style={[todayStyles.playBtn, { backgroundColor: isActive && isPlaying ? "#f0bc42" : "#f0bc4222" }]}
         >
           <Ionicons name={isActive && isPlaying ? "pause" : "play"} size={18} color={isActive && isPlaying ? "#000" : "#f0bc42"} />
@@ -181,15 +183,16 @@ function CategoryCard({
   cat,
   isDark,
   onPress,
+  trackCount,
 }: {
   cat: (typeof CATEGORIES)[0];
   isDark: boolean;
   onPress: () => void;
+  trackCount: number;
 }) {
   const colors = useColors();
   const color = CAT_COLORS[cat.id] ?? "#f0bc42";
   const icon = CAT_ICONS[cat.id] ?? "musical-notes";
-  const trackCount = TRACKS.filter((t) => t.categoryId === cat.id).length;
   return (
     <Pressable
       onPress={onPress}
@@ -217,7 +220,7 @@ function CategoryCard({
   );
 }
 
-function TrackGridCard({ track, isDark }: { track: (typeof TRACKS)[0]; isDark: boolean }) {
+function TrackGridCard({ track, isDark, allTracks }: { track: UnifiedTrack; isDark: boolean; allTracks: UnifiedTrack[] }) {
   const colors = useColors();
   const cat = CATEGORIES.find((c) => c.id === track.categoryId);
   const color = CAT_COLORS[track.categoryId] ?? "#f0bc42";
@@ -257,7 +260,7 @@ function TrackGridCard({ track, isDark }: { track: (typeof TRACKS)[0]; isDark: b
         onPress={() =>
           playTrack(
             track,
-            TRACKS.filter((t) => t.categoryId === track.categoryId),
+            allTracks.filter((t) => t.categoryId === track.categoryId),
           )
         }
         style={[styles.trackGridPlay, { backgroundColor: color + "22" }]}
@@ -276,13 +279,24 @@ export default function HomeScreen() {
   const [popularActive, setPopularActive] = useState(false);
   const [recentActive, setRecentActive] = useState(false);
   const [quizTrackId, setQuizTrackId] = useState<string | null>(null);
+  const [allTracks, setAllTracks] = useState<UnifiedTrack[]>([]);
 
-  const popularTracks = [...TRACKS]
+  useFocusEffect(
+    useCallback(() => {
+      getAllTracks().then(t => setAllTracks(t));
+    }, [])
+  );
+
+  const popularTracks = [...allTracks]
     .sort((a, b) => b.viewCount - a.viewCount)
     .slice(0, 10);
-  const recentTracks = [...TRACKS].slice(-10).reverse();
+  const recentTracks = [...allTracks].slice(-10).reverse();
   const showList = popularActive || recentActive;
   const displayTracks = recentActive ? recentTracks : popularTracks;
+  const catCounts = allTracks.reduce<Record<string, number>>((acc, t) => {
+    acc[t.categoryId] = (acc[t.categoryId] ?? 0) + 1;
+    return acc;
+  }, {});
 
   const togglePopular = () => {
     setPopularActive((p) => !p);
@@ -323,12 +337,13 @@ export default function HomeScreen() {
               key={cat.id}
               cat={cat}
               isDark={isDark}
+              trackCount={catCounts[cat.id] ?? 0}
               onPress={() => router.push(`/category/${cat.id}` as any)}
             />
           ))}
         </View>
 
-        <TodaysFreeTrack isDark={isDark} />
+        <TodaysFreeTrack isDark={isDark} tracks={allTracks} />
 
         <View style={styles.toggleRow}>
           <Pressable
@@ -384,7 +399,7 @@ export default function HomeScreen() {
         {showList && (
           <View style={styles.trackGrid}>
             {displayTracks.map((track) => (
-              <TrackGridCard key={track.id} track={track} isDark={isDark} />
+              <TrackGridCard key={track.id} track={track} isDark={isDark} allTracks={allTracks} />
             ))}
           </View>
         )}
@@ -399,7 +414,7 @@ export default function HomeScreen() {
           visible
           onClose={() => setQuizTrackId(null)}
           trackId={quizTrackId}
-          trackTitle={TRACKS.find((t) => t.id === quizTrackId)?.title ?? ""}
+          trackTitle={allTracks.find((t) => t.id === quizTrackId)?.title ?? ""}
         />
       )}
     </SafeAreaView>

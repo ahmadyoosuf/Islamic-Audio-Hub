@@ -1,11 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState } from "react";
+import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
+import React, { useState, useCallback } from "react";
 import {
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -13,6 +14,7 @@ import AudioPlayer from "@/components/AudioPlayer";
 import GameLevelCard from "@/components/GameLevelCard";
 import GameWorldBackground from "@/components/GameWorldBackground";
 import { CATEGORIES, TRACKS } from "@/data/categories";
+import { getCustomTracks, type CustomTrack } from "@/data/customStorage";
 import { useColors } from "@/hooks/useColors";
 
 const CAT_COLORS: Record<string, string> = {
@@ -40,6 +42,15 @@ export default function CategoryScreen() {
   const color = CAT_COLORS[id ?? ""] ?? "#f0bc42";
   const icon = CAT_ICONS[id ?? ""] ?? "musical-notes";
   const [visibleCount, setVisibleCount] = useState(15);
+  const [customTracks, setCustomTracks] = useState<CustomTrack[]>([]);
+
+  useFocusEffect(
+    useCallback(() => {
+      getCustomTracks().then((all) => {
+        setCustomTracks(all.filter((t) => t.categoryId === id));
+      });
+    }, [id])
+  );
 
   if (!category) {
     return (
@@ -110,6 +121,43 @@ export default function CategoryScreen() {
               </Text>
               <Ionicons name="chevron-down" size={16} color={color} />
             </Pressable>
+          )}
+
+          {customTracks.length > 0 && (
+            <View style={styles.uploadedSection}>
+              <View style={styles.uploadedHeader}>
+                <View style={[styles.uploadedBadge, { backgroundColor: color + "22" }]}>
+                  <Ionicons name="cloud-upload" size={14} color={color} />
+                  <Text style={[styles.uploadedBadgeText, { color }]}>
+                    Admin Upload ({customTracks.length})
+                  </Text>
+                </View>
+              </View>
+              {customTracks.map((ct, i) => (
+                <View key={ct.id} style={[styles.customTrackCard, { borderLeftColor: color }]}>
+                  <View style={[styles.customTrackNum, { backgroundColor: color + "22" }]}>
+                    <Text style={[styles.customTrackNumText, { color }]}>
+                      {tracks.length + i + 1}
+                    </Text>
+                  </View>
+                  <View style={styles.customTrackInfo}>
+                    <Text style={styles.customTrackTitle} numberOfLines={1}>
+                      {ct.title}
+                    </Text>
+                    {ct.description ? (
+                      <Text style={styles.customTrackDesc} numberOfLines={1}>
+                        {ct.description}
+                      </Text>
+                    ) : (
+                      <Text style={styles.customTrackDesc}>{ct.fileName}</Text>
+                    )}
+                  </View>
+                  <View style={[styles.uploadedTag, { backgroundColor: color + "22" }]}>
+                    <Ionicons name="musical-notes" size={14} color={color} />
+                  </View>
+                </View>
+              ))}
+            </View>
           )}
 
           <View style={{ height: 130 }} />
@@ -217,5 +265,66 @@ const styles = StyleSheet.create({
   loadMoreText: {
     fontSize: 14,
     fontWeight: "600",
+  },
+  uploadedSection: {
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  uploadedHeader: {
+    marginBottom: 10,
+  },
+  uploadedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  uploadedBadgeText: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  customTrackCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1a1a2e",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    gap: 12,
+  },
+  customTrackNum: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  customTrackNumText: {
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  customTrackInfo: {
+    flex: 1,
+  },
+  customTrackTitle: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  customTrackDesc: {
+    color: "#888",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  uploadedTag: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

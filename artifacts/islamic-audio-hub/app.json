@@ -9,7 +9,12 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "updates": {
-      "enabled": false
+      "enabled": false,
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "NEVER"
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
     },
     "splash": {
       "image": "./assets/images/icon.png",

@@ -55,7 +55,7 @@ export interface UnifiedQuiz {
   addedAt: number;
 }
 
-// ─── BUILT-IN CATEGORIES (migration seed) ─────────────────────────────────
+// ─── BUILT-IN CATEGORIES ───────────────────────────────────────────────────
 
 const BUILT_IN_CATS: StoredCategory[] = [
   { id: 'quran',  name: 'குர்ஆன் விளக்கம்',   icon: '📖', color: '#f0bc42', sortOrder: 1, createdAt: 0 },
@@ -65,109 +65,142 @@ const BUILT_IN_CATS: StoredCategory[] = [
   { id: 'daily',  name: 'அன்றாட வழிகாட்டி', icon: '☀️', color: '#fb923c', description: 'தினமும் படிக்க வேண்டிய துஆக்கள் மற்றும் வழிகாட்டல்', sortOrder: 5, createdAt: 0 },
 ];
 
+// ─── SAFE JSON PARSE ───────────────────────────────────────────────────────
+
+function safeParseJSON<T>(raw: string | null, fallback: T): T {
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 // ─── INIT ──────────────────────────────────────────────────────────────────
 
 let _initPromise: Promise<void> | null = null;
 
 export async function initDB(): Promise<void> {
   if (_initPromise) return _initPromise;
-  _initPromise = _doInit();
+  _initPromise = _doInit().catch(err => {
+    // Reset so next call can retry instead of always returning rejected promise
+    _initPromise = null;
+    console.warn('[unifiedStorage] initDB failed, will retry on next call:', err);
+  });
   return _initPromise;
 }
 
 async function _doInit(): Promise<void> {
-  const flag = await AsyncStorage.getItem(DB_INIT_KEY);
-  if (flag === '1') {
-    await _ensureCategorySeeded();
-    return;
-  }
-
-  const { TRACKS_BY_CATEGORY, QUIZ_QUESTIONS } = require('./categories');
-
-  const allTracks: UnifiedTrack[] = Object.values(TRACKS_BY_CATEGORY as Record<string, any[]>)
-    .flat()
-    .map((t: any) => {
-      const hasQ = !!(QUIZ_QUESTIONS[t.id]?.length);
-      return {
-        id: t.id,
-        title: t.title,
-        categoryId: t.categoryId,
-        categoryName: t.categoryName,
-        duration: t.duration,
-        audioUrl: t.audioUrl,
-        viewCount: t.viewCount ?? 0,
-        isPremium: t.isPremium ?? false,
-        sortOrder: t.sortOrder ?? 0,
-        prizeEnabled: t.prizeEnabled ?? false,
-        hasQuiz: hasQ,
-        description: '',
-        fileName: undefined,
-        uploadedAt: Date.now(),
-        isBuiltIn: true,
-      };
-    });
-
-  const allQuizzes: UnifiedQuiz[] = [];
-  let idx = 0;
-  for (const [trackId, qs] of Object.entries(QUIZ_QUESTIONS as Record<string, any[]>)) {
-    for (const q of qs) {
-      allQuizzes.push({
-        id: `bq_${trackId}_${idx++}`,
-        trackId,
-        categoryId: trackId.split('-')[0],
-        question: q.question,
-        options: q.options,
-        correctIndex: q.correctIndex,
-        addedAt: Date.now(),
-      });
+  try {
+    const flag = await AsyncStorage.getItem(DB_INIT_KEY);
+    if (flag === '1') {
+      await _ensureCategorySeeded();
+      return;
     }
+
+    const { TRACKS_BY_CATEGORY, QUIZ_QUESTIONS } = require('./categories');
+
+    const allTracks: UnifiedTrack[] = Object.values(TRACKS_BY_CATEGORY as Record<string, any[]>)
+      .flat()
+      .map((t: any) => {
+        const hasQ = !!(QUIZ_QUESTIONS[t.id]?.length);
+        return {
+          id: t.id,
+          title: t.title,
+          categoryId: t.categoryId,
+          categoryName: t.categoryName,
+          duration: t.duration ?? 0,
+          audioUrl: t.audioUrl ?? '',
+          viewCount: t.viewCount ?? 0,
+          isPremium: t.isPremium ?? false,
+          sortOrder: t.sortOrder ?? 0,
+          prizeEnabled: t.prizeEnabled ?? false,
+          hasQuiz: hasQ,
+          description: '',
+          fileName: undefined,
+          uploadedAt: Date.now(),
+          isBuiltIn: true,
+        };
+      });
+
+    const allQuizzes: UnifiedQuiz[] = [];
+    let idx = 0;
+    for (const [trackId, qs] of Object.entries(QUIZ_QUESTIONS as Record<string, any[]>)) {
+      for (const q of qs) {
+        allQuizzes.push({
+          id: `bq_${trackId}_${idx++}`,
+          trackId,
+          categoryId: trackId.split('-')[0],
+          question: q.question,
+          options: q.options,
+          correctIndex: q.correctIndex,
+          addedAt: Date.now(),
+        });
+      }
+    }
+
+    const existingTracksRaw = await AsyncStorage.getItem('custom_tracks');
+    const existingTracks: any[] = safeParseJSON(existingTracksRaw, []);
+    const existingQuizzesRaw = await AsyncStorage.getItem('custom_quizzes');
+    const existingQuizzes: any[] = safeParseJSON(existingQuizzesRaw, []);
+
+    const migratedCustomTracks: UnifiedTrack[] = existingTracks.map((t: any) => ({
+      id: t.id, title: t.title, categoryId: t.categoryId, categoryName: t.categoryName,
+      duration: t.duration ?? 0, audioUrl: t.audioUri ?? t.audioUrl ?? '',
+      viewCount: 0, isPremium: false, sortOrder: 9999, hasQuiz: false,
+      description: t.description ?? '', fileName: t.fileName,
+      uploadedAt: t.uploadedAt ?? Date.now(), isBuiltIn: false,
+    }));
+
+    const migratedCustomQuizzes: UnifiedQuiz[] = existingQuizzes.map((q: any) => ({
+      id: q.id, trackId: q.trackId ?? '', categoryId: q.categoryId ?? '',
+      question: q.question, options: q.options, correctIndex: q.correctIndex,
+      addedAt: q.addedAt ?? Date.now(),
+    }));
+
+    await AsyncStorage.multiSet([
+      [DB_TRACKS_KEY, JSON.stringify([...allTracks, ...migratedCustomTracks])],
+      [DB_QUIZZES_KEY, JSON.stringify([...allQuizzes, ...migratedCustomQuizzes])],
+      [DB_CATS_KEY, JSON.stringify(BUILT_IN_CATS)],
+      [DB_INIT_KEY, '1'],
+    ]);
+  } catch (err) {
+    console.error('[unifiedStorage] _doInit error:', err);
+    throw err;
   }
-
-  const existingTracksRaw = await AsyncStorage.getItem('custom_tracks');
-  const existingTracks: any[] = existingTracksRaw ? JSON.parse(existingTracksRaw) : [];
-  const existingQuizzesRaw = await AsyncStorage.getItem('custom_quizzes');
-  const existingQuizzes: any[] = existingQuizzesRaw ? JSON.parse(existingQuizzesRaw) : [];
-
-  const migratedCustomTracks: UnifiedTrack[] = existingTracks.map((t: any) => ({
-    id: t.id, title: t.title, categoryId: t.categoryId, categoryName: t.categoryName,
-    duration: t.duration ?? 0, audioUrl: t.audioUri ?? t.audioUrl ?? '',
-    viewCount: 0, isPremium: false, sortOrder: 9999, hasQuiz: false,
-    description: t.description ?? '', fileName: t.fileName,
-    uploadedAt: t.uploadedAt ?? Date.now(), isBuiltIn: false,
-  }));
-
-  const migratedCustomQuizzes: UnifiedQuiz[] = existingQuizzes.map((q: any) => ({
-    id: q.id, trackId: q.trackId ?? '', categoryId: q.categoryId ?? '',
-    question: q.question, options: q.options, correctIndex: q.correctIndex,
-    addedAt: q.addedAt ?? Date.now(),
-  }));
-
-  await AsyncStorage.multiSet([
-    [DB_TRACKS_KEY, JSON.stringify([...allTracks, ...migratedCustomTracks])],
-    [DB_QUIZZES_KEY, JSON.stringify([...allQuizzes, ...migratedCustomQuizzes])],
-    [DB_CATS_KEY, JSON.stringify(BUILT_IN_CATS)],
-    [DB_INIT_KEY, '1'],
-  ]);
 }
 
 async function _ensureCategorySeeded(): Promise<void> {
-  const raw = await AsyncStorage.getItem(DB_CATS_KEY);
-  if (!raw || JSON.parse(raw).length === 0) {
-    await AsyncStorage.setItem(DB_CATS_KEY, JSON.stringify(BUILT_IN_CATS));
+  try {
+    const raw = await AsyncStorage.getItem(DB_CATS_KEY);
+    const cats = safeParseJSON<StoredCategory[]>(raw, []);
+    if (cats.length === 0) {
+      await AsyncStorage.setItem(DB_CATS_KEY, JSON.stringify(BUILT_IN_CATS));
+    }
+  } catch (err) {
+    console.warn('[unifiedStorage] _ensureCategorySeeded error:', err);
   }
 }
 
 // ─── TRACKS ────────────────────────────────────────────────────────────────
 
 export async function getAllTracks(): Promise<UnifiedTrack[]> {
-  await initDB();
-  const raw = await AsyncStorage.getItem(DB_TRACKS_KEY);
-  return raw ? JSON.parse(raw) : [];
+  try {
+    await initDB();
+    const raw = await AsyncStorage.getItem(DB_TRACKS_KEY);
+    return safeParseJSON<UnifiedTrack[]>(raw, []);
+  } catch {
+    return [];
+  }
 }
 
 export async function getTracksByCategory(categoryId: string): Promise<UnifiedTrack[]> {
-  const all = await getAllTracks();
-  return all.filter(t => t.categoryId === categoryId).sort((a, b) => a.sortOrder - b.sortOrder);
+  try {
+    const all = await getAllTracks();
+    return all.filter(t => t.categoryId === categoryId).sort((a, b) => a.sortOrder - b.sortOrder);
+  } catch {
+    return [];
+  }
 }
 
 export async function getTracksByCategoryAndSubcategory(
@@ -180,14 +213,22 @@ export async function getTracksByCategoryAndSubcategory(
 }
 
 export async function batchUpdateSortOrder(updates: Array<{ id: string; sortOrder: number }>): Promise<void> {
-  const all = await getAllTracks();
-  const map = new Map(updates.map(u => [u.id, u.sortOrder]));
-  await AsyncStorage.setItem(DB_TRACKS_KEY, JSON.stringify(all.map(t => map.has(t.id) ? { ...t, sortOrder: map.get(t.id)! } : t)));
+  try {
+    const all = await getAllTracks();
+    const map = new Map(updates.map(u => [u.id, u.sortOrder]));
+    await AsyncStorage.setItem(DB_TRACKS_KEY, JSON.stringify(all.map(t => map.has(t.id) ? { ...t, sortOrder: map.get(t.id)! } : t)));
+  } catch (err) {
+    console.warn('[unifiedStorage] batchUpdateSortOrder error:', err);
+  }
 }
 
 export async function getTrackById(id: string): Promise<UnifiedTrack | null> {
-  const all = await getAllTracks();
-  return all.find(t => t.id === id) ?? null;
+  try {
+    const all = await getAllTracks();
+    return all.find(t => t.id === id) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function addTrack(track: UnifiedTrack): Promise<void> {
@@ -197,157 +238,212 @@ export async function addTrack(track: UnifiedTrack): Promise<void> {
 }
 
 export async function updateTrack(id: string, updates: Partial<UnifiedTrack>): Promise<void> {
-  const all = await getAllTracks();
-  const idx = all.findIndex(t => t.id === id);
-  if (idx !== -1) {
-    all[idx] = { ...all[idx], ...updates };
-    await AsyncStorage.setItem(DB_TRACKS_KEY, JSON.stringify(all));
+  try {
+    const all = await getAllTracks();
+    const idx = all.findIndex(t => t.id === id);
+    if (idx !== -1) {
+      all[idx] = { ...all[idx], ...updates };
+      await AsyncStorage.setItem(DB_TRACKS_KEY, JSON.stringify(all));
+    }
+  } catch (err) {
+    console.warn('[unifiedStorage] updateTrack error:', err);
   }
 }
 
 export async function deleteTrack(id: string): Promise<void> {
-  const all = await getAllTracks();
-  await AsyncStorage.setItem(DB_TRACKS_KEY, JSON.stringify(all.filter(t => t.id !== id)));
+  try {
+    const all = await getAllTracks();
+    await AsyncStorage.setItem(DB_TRACKS_KEY, JSON.stringify(all.filter(t => t.id !== id)));
+  } catch (err) {
+    console.warn('[unifiedStorage] deleteTrack error:', err);
+  }
 }
 
 export async function getCategoryTrackCounts(): Promise<Record<string, number>> {
-  const all = await getAllTracks();
-  const counts: Record<string, number> = {};
-  for (const t of all) { counts[t.categoryId] = (counts[t.categoryId] ?? 0) + 1; }
-  return counts;
+  try {
+    const all = await getAllTracks();
+    const counts: Record<string, number> = {};
+    for (const t of all) { counts[t.categoryId] = (counts[t.categoryId] ?? 0) + 1; }
+    return counts;
+  } catch {
+    return {};
+  }
 }
 
 // ─── QUIZZES ───────────────────────────────────────────────────────────────
 
 export async function getQuizzesByTrack(trackId: string): Promise<UnifiedQuiz[]> {
-  await initDB();
-  const raw = await AsyncStorage.getItem(DB_QUIZZES_KEY);
-  const all: UnifiedQuiz[] = raw ? JSON.parse(raw) : [];
-  return all.filter(q => q.trackId === trackId);
+  try {
+    await initDB();
+    const raw = await AsyncStorage.getItem(DB_QUIZZES_KEY);
+    const all: UnifiedQuiz[] = safeParseJSON(raw, []);
+    return all.filter(q => q.trackId === trackId);
+  } catch {
+    return [];
+  }
 }
 
 export async function getAllQuizzes(): Promise<UnifiedQuiz[]> {
-  await initDB();
-  const raw = await AsyncStorage.getItem(DB_QUIZZES_KEY);
-  return raw ? JSON.parse(raw) : [];
+  try {
+    await initDB();
+    const raw = await AsyncStorage.getItem(DB_QUIZZES_KEY);
+    return safeParseJSON<UnifiedQuiz[]>(raw, []);
+  } catch {
+    return [];
+  }
 }
 
 export async function saveQuiz(quiz: UnifiedQuiz): Promise<void> {
   const all = await getAllQuizzes();
   all.push(quiz);
   await AsyncStorage.setItem(DB_QUIZZES_KEY, JSON.stringify(all));
-  await updateTrack(quiz.trackId, { hasQuiz: true });
+  if (quiz.trackId) await updateTrack(quiz.trackId, { hasQuiz: true });
 }
 
 export async function updateQuiz(id: string, updates: Partial<UnifiedQuiz>): Promise<void> {
-  const all = await getAllQuizzes();
-  const idx = all.findIndex(q => q.id === id);
-  if (idx !== -1) {
-    all[idx] = { ...all[idx], ...updates };
-    await AsyncStorage.setItem(DB_QUIZZES_KEY, JSON.stringify(all));
+  try {
+    const all = await getAllQuizzes();
+    const idx = all.findIndex(q => q.id === id);
+    if (idx !== -1) {
+      all[idx] = { ...all[idx], ...updates };
+      await AsyncStorage.setItem(DB_QUIZZES_KEY, JSON.stringify(all));
+    }
+  } catch (err) {
+    console.warn('[unifiedStorage] updateQuiz error:', err);
   }
 }
 
 export async function deleteQuiz(id: string): Promise<void> {
-  const all = await getAllQuizzes();
-  const quiz = all.find(q => q.id === id);
-  const filtered = all.filter(q => q.id !== id);
-  await AsyncStorage.setItem(DB_QUIZZES_KEY, JSON.stringify(filtered));
-  if (quiz?.trackId) {
-    const remaining = filtered.filter(q => q.trackId === quiz.trackId);
-    if (remaining.length === 0) await updateTrack(quiz.trackId, { hasQuiz: false });
+  try {
+    const all = await getAllQuizzes();
+    const quiz = all.find(q => q.id === id);
+    const filtered = all.filter(q => q.id !== id);
+    await AsyncStorage.setItem(DB_QUIZZES_KEY, JSON.stringify(filtered));
+    if (quiz?.trackId) {
+      const remaining = filtered.filter(q => q.trackId === quiz.trackId);
+      if (remaining.length === 0) await updateTrack(quiz.trackId, { hasQuiz: false });
+    }
+  } catch (err) {
+    console.warn('[unifiedStorage] deleteQuiz error:', err);
   }
 }
 
 // ─── CATEGORIES ────────────────────────────────────────────────────────────
 
-function catUid(): string {
-  return 'cat_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-}
-
 export async function getAllCategories(): Promise<StoredCategory[]> {
-  await initDB();
-  const raw = await AsyncStorage.getItem(DB_CATS_KEY);
-  const cats: StoredCategory[] = raw ? JSON.parse(raw) : [];
-  if (cats.length === 0) {
-    await AsyncStorage.setItem(DB_CATS_KEY, JSON.stringify(BUILT_IN_CATS));
-    return [...BUILT_IN_CATS];
+  try {
+    await initDB();
+    const raw = await AsyncStorage.getItem(DB_CATS_KEY);
+    const cats = safeParseJSON<StoredCategory[]>(raw, []);
+    if (cats.length === 0) return BUILT_IN_CATS;
+    return cats.sort((a, b) => a.sortOrder - b.sortOrder);
+  } catch {
+    return BUILT_IN_CATS;
   }
-  return cats.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
 export async function getCategoryById(id: string): Promise<StoredCategory | null> {
-  const all = await getAllCategories();
-  return all.find(c => c.id === id) ?? null;
+  try {
+    const all = await getAllCategories();
+    return all.find(c => c.id === id) ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function addCategory(data: Omit<StoredCategory, 'id' | 'createdAt'>): Promise<StoredCategory> {
   const all = await getAllCategories();
-  const item: StoredCategory = { ...data, id: catUid(), createdAt: Date.now() };
-  all.push(item);
+  const cat: StoredCategory = {
+    ...data,
+    id: `cat_${Date.now()}`,
+    createdAt: Date.now(),
+  };
+  all.push(cat);
   await AsyncStorage.setItem(DB_CATS_KEY, JSON.stringify(all));
-  return item;
+  return cat;
 }
 
 export async function updateCategory(id: string, updates: Partial<StoredCategory>): Promise<void> {
-  const raw = await AsyncStorage.getItem(DB_CATS_KEY);
-  const all: StoredCategory[] = raw ? JSON.parse(raw) : [];
-  const idx = all.findIndex(c => c.id === id);
-  if (idx !== -1) {
-    all[idx] = { ...all[idx], ...updates };
-    await AsyncStorage.setItem(DB_CATS_KEY, JSON.stringify(all));
+  try {
+    const all = await getAllCategories();
+    const idx = all.findIndex(c => c.id === id);
+    if (idx !== -1) {
+      all[idx] = { ...all[idx], ...updates };
+      await AsyncStorage.setItem(DB_CATS_KEY, JSON.stringify(all));
+    }
+  } catch (err) {
+    console.warn('[unifiedStorage] updateCategory error:', err);
   }
 }
 
 export async function deleteCategory(id: string): Promise<void> {
-  const raw = await AsyncStorage.getItem(DB_CATS_KEY);
-  const all: StoredCategory[] = raw ? JSON.parse(raw) : [];
-  await AsyncStorage.setItem(DB_CATS_KEY, JSON.stringify(all.filter(c => c.id !== id)));
-  const subs = await getSubcategoriesByCategory(id);
-  for (const s of subs) await deleteSubcategory(s.id);
+  try {
+    const all = await getAllCategories();
+    await AsyncStorage.setItem(DB_CATS_KEY, JSON.stringify(all.filter(c => c.id !== id)));
+    // cascade: remove all tracks in this category
+    const tracks = await getAllTracks();
+    await AsyncStorage.setItem(DB_TRACKS_KEY, JSON.stringify(tracks.filter(t => t.categoryId !== id)));
+    // cascade: remove subcategories
+    const subs = await getSubcategoriesByCategory(id);
+    const allSubs = safeParseJSON<StoredSubcategory[]>(await AsyncStorage.getItem(DB_SUBS_KEY), []);
+    await AsyncStorage.setItem(DB_SUBS_KEY, JSON.stringify(allSubs.filter(s => s.categoryId !== id)));
+  } catch (err) {
+    console.warn('[unifiedStorage] deleteCategory error:', err);
+  }
 }
 
 // ─── SUBCATEGORIES ─────────────────────────────────────────────────────────
 
-function subUid(): string {
-  return 'sub_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-}
-
 export async function getSubcategoriesByCategory(categoryId: string): Promise<StoredSubcategory[]> {
-  const raw = await AsyncStorage.getItem(DB_SUBS_KEY);
-  const all: StoredSubcategory[] = raw ? JSON.parse(raw) : [];
-  return all.filter(s => s.categoryId === categoryId).sort((a, b) => a.sortOrder - b.sortOrder);
+  try {
+    const raw = await AsyncStorage.getItem(DB_SUBS_KEY);
+    const all = safeParseJSON<StoredSubcategory[]>(raw, []);
+    return all.filter(s => s.categoryId === categoryId).sort((a, b) => a.sortOrder - b.sortOrder);
+  } catch {
+    return [];
+  }
 }
 
 export async function addSubcategory(data: Omit<StoredSubcategory, 'id' | 'createdAt'>): Promise<StoredSubcategory> {
   const raw = await AsyncStorage.getItem(DB_SUBS_KEY);
-  const all: StoredSubcategory[] = raw ? JSON.parse(raw) : [];
-  const item: StoredSubcategory = { ...data, id: subUid(), createdAt: Date.now() };
-  all.push(item);
+  const all = safeParseJSON<StoredSubcategory[]>(raw, []);
+  const sub: StoredSubcategory = {
+    ...data,
+    id: `sub_${Date.now()}`,
+    createdAt: Date.now(),
+  };
+  all.push(sub);
   await AsyncStorage.setItem(DB_SUBS_KEY, JSON.stringify(all));
-  return item;
+  return sub;
 }
 
 export async function updateSubcategory(id: string, updates: Partial<StoredSubcategory>): Promise<void> {
-  const raw = await AsyncStorage.getItem(DB_SUBS_KEY);
-  const all: StoredSubcategory[] = raw ? JSON.parse(raw) : [];
-  const idx = all.findIndex(s => s.id === id);
-  if (idx !== -1) {
-    all[idx] = { ...all[idx], ...updates };
-    await AsyncStorage.setItem(DB_SUBS_KEY, JSON.stringify(all));
+  try {
+    const raw = await AsyncStorage.getItem(DB_SUBS_KEY);
+    const all = safeParseJSON<StoredSubcategory[]>(raw, []);
+    const idx = all.findIndex(s => s.id === id);
+    if (idx !== -1) {
+      all[idx] = { ...all[idx], ...updates };
+      await AsyncStorage.setItem(DB_SUBS_KEY, JSON.stringify(all));
+    }
+  } catch (err) {
+    console.warn('[unifiedStorage] updateSubcategory error:', err);
   }
 }
 
 export async function deleteSubcategory(id: string): Promise<void> {
-  const raw = await AsyncStorage.getItem(DB_SUBS_KEY);
-  const all: StoredSubcategory[] = raw ? JSON.parse(raw) : [];
-  await AsyncStorage.setItem(DB_SUBS_KEY, JSON.stringify(all.filter(s => s.id !== id)));
-  const tracks = await getAllTracks();
-  const affected = tracks.filter(t => t.subcategoryId === id);
-  for (const t of affected) await updateTrack(t.id, { subcategoryId: undefined });
+  try {
+    const raw = await AsyncStorage.getItem(DB_SUBS_KEY);
+    const all = safeParseJSON<StoredSubcategory[]>(raw, []);
+    await AsyncStorage.setItem(DB_SUBS_KEY, JSON.stringify(all.filter(s => s.id !== id)));
+    // unassign tracks that were in this subcategory
+    const tracks = await getAllTracks();
+    const updated = tracks.map(t => t.subcategoryId === id ? { ...t, subcategoryId: undefined } : t);
+    await AsyncStorage.setItem(DB_TRACKS_KEY, JSON.stringify(updated));
+  } catch (err) {
+    console.warn('[unifiedStorage] deleteSubcategory error:', err);
+  }
 }
-
-// ─── RESET ─────────────────────────────────────────────────────────────────
 
 export async function resetDB(): Promise<void> {
   _initPromise = null;

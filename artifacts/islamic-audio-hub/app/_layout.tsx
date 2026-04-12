@@ -8,7 +8,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
@@ -16,9 +16,13 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider } from "@/context/AppContext";
 import { AudioProvider } from "@/context/AudioContext";
 
-SplashScreen.preventAutoHideAsync();
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, staleTime: 30_000 },
+  },
+});
 
 function RootLayoutNav() {
   return (
@@ -44,13 +48,22 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
+  // Force-proceed after 4 seconds even if fonts haven't loaded/errored
+  const [forceReady, setForceReady] = useState(false);
   useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded, fontError]);
+    const timer = setTimeout(() => setForceReady(true), 4000);
+    return () => clearTimeout(timer);
+  }, []);
 
-  if (!fontsLoaded && !fontError) return null;
+  const isReady = fontsLoaded || !!fontError || forceReady;
+
+  useEffect(() => {
+    if (isReady) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [isReady]);
+
+  if (!isReady) return null;
 
   return (
     <SafeAreaProvider>

@@ -6,16 +6,17 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AudioPlayer from "@/components/AudioPlayer";
+import CustomTrackCard from "@/components/CustomTrackCard";
 import GameLevelCard from "@/components/GameLevelCard";
 import GameWorldBackground from "@/components/GameWorldBackground";
 import { CATEGORIES, TRACKS } from "@/data/categories";
 import { getCustomTracks, type CustomTrack } from "@/data/customStorage";
 import { useColors } from "@/hooks/useColors";
+import type { Track } from "@/context/AppContext";
 
 const CAT_COLORS: Record<string, string> = {
   quran: "#f0bc42",
@@ -33,6 +34,20 @@ const CAT_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   daily: "sunny",
 };
 
+function customTrackToTrack(ct: CustomTrack): Track {
+  return {
+    id: ct.id,
+    title: ct.title,
+    categoryId: ct.categoryId,
+    categoryName: ct.categoryName,
+    duration: ct.duration || 0,
+    audioUrl: ct.audioUri,
+    viewCount: 0,
+    isPremium: false,
+    sortOrder: 9999,
+  };
+}
+
 export default function CategoryScreen() {
   const colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -47,7 +62,8 @@ export default function CategoryScreen() {
   useFocusEffect(
     useCallback(() => {
       getCustomTracks().then((all) => {
-        setCustomTracks(all.filter((t) => t.categoryId === id));
+        const filtered = all.filter((t) => t.categoryId === id);
+        setCustomTracks(filtered);
       });
     }, [id])
   );
@@ -63,6 +79,9 @@ export default function CategoryScreen() {
   }
 
   const visibleTracks = tracks.slice(0, visibleCount);
+
+  const customAsTrack: Track[] = customTracks.map(customTrackToTrack);
+  const fullPlaylist: Track[] = [...tracks, ...customAsTrack];
 
   return (
     <View style={[styles.container, { backgroundColor: "#0f0a2e" }]}>
@@ -81,7 +100,9 @@ export default function CategoryScreen() {
             </Text>
           </View>
           <View style={[styles.trackCountBadge, { backgroundColor: color + "22", borderColor: color + "44" }]}>
-            <Text style={[styles.trackCountText, { color }]}>{tracks.length}</Text>
+            <Text style={[styles.trackCountText, { color }]}>
+              {tracks.length + customTracks.length}
+            </Text>
           </View>
         </View>
 
@@ -89,10 +110,10 @@ export default function CategoryScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.progressLabel}>நிலைகள் (Levels)</Text>
             <Text style={[styles.progressValue, { color }]}>
-              {tracks.length} பாடங்கள் இங்கு உள்ளன
+              {tracks.length + customTracks.length} பாடங்கள் இங்கு உள்ளன
             </Text>
           </View>
-          <View style={[styles.progressBarContainer]}>
+          <View style={styles.progressBarContainer}>
             <View style={[styles.progressBarFill, { width: "70%", backgroundColor: color }]} />
           </View>
         </View>
@@ -107,7 +128,7 @@ export default function CategoryScreen() {
               key={track.id}
               track={track}
               levelNumber={i + 1}
-              playlist={tracks}
+              playlist={fullPlaylist}
             />
           ))}
 
@@ -133,29 +154,15 @@ export default function CategoryScreen() {
                   </Text>
                 </View>
               </View>
-              {customTracks.map((ct, i) => (
-                <View key={ct.id} style={[styles.customTrackCard, { borderLeftColor: color }]}>
-                  <View style={[styles.customTrackNum, { backgroundColor: color + "22" }]}>
-                    <Text style={[styles.customTrackNumText, { color }]}>
-                      {tracks.length + i + 1}
-                    </Text>
-                  </View>
-                  <View style={styles.customTrackInfo}>
-                    <Text style={styles.customTrackTitle} numberOfLines={1}>
-                      {ct.title}
-                    </Text>
-                    {ct.description ? (
-                      <Text style={styles.customTrackDesc} numberOfLines={1}>
-                        {ct.description}
-                      </Text>
-                    ) : (
-                      <Text style={styles.customTrackDesc}>{ct.fileName}</Text>
-                    )}
-                  </View>
-                  <View style={[styles.uploadedTag, { backgroundColor: color + "22" }]}>
-                    <Ionicons name="musical-notes" size={14} color={color} />
-                  </View>
-                </View>
+
+              {customAsTrack.map((track, i) => (
+                <CustomTrackCard
+                  key={track.id}
+                  track={track}
+                  levelNumber={tracks.length + i + 1}
+                  playlist={fullPlaylist}
+                  catColor={color}
+                />
               ))}
             </View>
           )}
@@ -170,9 +177,7 @@ export default function CategoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -285,46 +290,5 @@ const styles = StyleSheet.create({
   uploadedBadgeText: {
     fontSize: 12,
     fontWeight: "700",
-  },
-  customTrackCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1a1a2e",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
-    borderLeftWidth: 3,
-    gap: 12,
-  },
-  customTrackNum: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  customTrackNumText: {
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  customTrackInfo: {
-    flex: 1,
-  },
-  customTrackTitle: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  customTrackDesc: {
-    color: "#888",
-    fontSize: 12,
-    marginTop: 2,
-  },
-  uploadedTag: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
   },
 });

@@ -8,10 +8,29 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import { CATEGORIES } from '../../../data/categories';
+
+async function persistAudioFile(uri: string, fileName: string): Promise<string> {
+  if (Platform.OS === 'web') return uri;
+  try {
+    const dir = FileSystem.documentDirectory + 'audio/';
+    const dirInfo = await FileSystem.getInfoAsync(dir);
+    if (!dirInfo.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+    const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const destPath = dir + Date.now() + '_' + safeFileName;
+    await FileSystem.copyAsync({ from: uri, to: destPath });
+    console.log('[EditAudio] Persisted to:', destPath);
+    return destPath;
+  } catch (err) {
+    console.warn('[EditAudio] Using original URI:', err);
+    return uri;
+  }
+}
 import {
   getCustomTracks,
   updateCustomTrack,
@@ -109,7 +128,9 @@ export default function EditAudioScreen() {
         categoryName: selectedCat?.name ?? categoryId,
       };
       if (audioFile) {
-        updates.audioUri = audioFile.uri;
+        const persistedUri = await persistAudioFile(audioFile.uri, audioFile.name);
+        console.log('[EditAudio] Saved audio URI:', persistedUri);
+        updates.audioUri = persistedUri;
         updates.fileName = audioFile.name;
       }
       await updateCustomTrack(id!, updates);

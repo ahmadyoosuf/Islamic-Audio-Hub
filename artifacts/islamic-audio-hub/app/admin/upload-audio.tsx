@@ -12,8 +12,30 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import { saveCustomTrack } from '../../data/customStorage';
 import { CATEGORIES } from '../../data/categories';
+
+async function persistAudioFile(uri: string, fileName: string): Promise<string> {
+  if (Platform.OS === 'web') {
+    return uri;
+  }
+  try {
+    const dir = FileSystem.documentDirectory + 'audio/';
+    const dirInfo = await FileSystem.getInfoAsync(dir);
+    if (!dirInfo.exists) {
+      await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+    }
+    const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const destPath = dir + Date.now() + '_' + safeFileName;
+    await FileSystem.copyAsync({ from: uri, to: destPath });
+    console.log('[Upload] Audio persisted to:', destPath);
+    return destPath;
+  } catch (err) {
+    console.warn('[Upload] Failed to persist audio file, using original URI:', err);
+    return uri;
+  }
+}
 
 export default function UploadAudioScreen() {
   const router = useRouter();
@@ -54,6 +76,9 @@ export default function UploadAudioScreen() {
     setLoading(true);
 
     try {
+      const persistedUri = await persistAudioFile(audioFile.uri, audioFile.name);
+      console.log('[Upload] Final audio URI:', persistedUri);
+
       const selectedCategory = CATEGORIES.find(c => c.id === categoryId);
       const track = {
         id: `custom_${Date.now()}`,
@@ -61,7 +86,7 @@ export default function UploadAudioScreen() {
         description: description.trim(),
         categoryId,
         categoryName: selectedCategory?.name || categoryId,
-        audioUri: audioFile.uri,
+        audioUri: persistedUri,
         fileName: audioFile.name,
         uploadedAt: Date.now(),
         duration: 0,
@@ -141,7 +166,7 @@ export default function UploadAudioScreen() {
       <Text style={styles.label}>Audio File (MP3) *</Text>
       <TouchableOpacity style={styles.filePicker} onPress={pickAudio}>
         {audioFile ? (
-          <View>
+          <View style={{ alignItems: 'center' }}>
             <Text style={styles.filePickerIcon}>🎵</Text>
             <Text style={styles.filePickerName}>{audioFile.name}</Text>
             <Text style={styles.filePickerChange}>மாற்ற tap பண்ணுங்க</Text>
@@ -153,6 +178,16 @@ export default function UploadAudioScreen() {
           </View>
         )}
       </TouchableOpacity>
+
+      {audioFile && (
+        <View style={styles.audioInfo}>
+          <Text style={styles.audioInfoLabel}>📋 File Info</Text>
+          <Text style={styles.audioInfoText}>Name: {audioFile.name}</Text>
+          <Text style={styles.audioInfoUri} numberOfLines={2}>
+            URI: {audioFile.uri.substring(0, 60)}...
+          </Text>
+        </View>
+      )}
 
       <TouchableOpacity
         style={[styles.uploadBtn, loading && { opacity: 0.6 }]}
@@ -210,6 +245,17 @@ const styles = StyleSheet.create({
   filePickerText: { color: '#666', fontSize: 14, textAlign: 'center' },
   filePickerName: { color: '#f0bc42', fontSize: 14, fontWeight: '600', textAlign: 'center' },
   filePickerChange: { color: '#666', fontSize: 12, textAlign: 'center', marginTop: 4 },
+  audioInfo: {
+    backgroundColor: '#111',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  audioInfoLabel: { color: '#f0bc42', fontSize: 12, fontWeight: '700', marginBottom: 6 },
+  audioInfoText: { color: '#888', fontSize: 12, marginBottom: 4 },
+  audioInfoUri: { color: '#555', fontSize: 11 },
   uploadBtn: {
     backgroundColor: '#f0bc42',
     borderRadius: 10,

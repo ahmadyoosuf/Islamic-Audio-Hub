@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, Alert, ActivityIndicator, Platform,
+  StyleSheet, Alert, ActivityIndicator, Platform, Animated,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
@@ -15,6 +15,7 @@ import {
   updateQuiz,
   deleteQuiz,
   getAllCategories,
+  getCategoryById,
   getSubcategoriesByCategory,
   type UnifiedTrack,
   type UnifiedQuiz,
@@ -32,9 +33,7 @@ async function persistAudioFile(uri: string, fileName: string): Promise<string> 
     const dest = dir + Date.now() + '_' + safe;
     await FileSystem.copyAsync({ from: uri, to: dest });
     return dest;
-  } catch (err) {
-    return uri;
-  }
+  } catch { return uri; }
 }
 
 interface QuizDraft {
@@ -50,13 +49,16 @@ export default function EditAudioScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
   const [track, setTrack] = useState<UnifiedTrack | null>(null);
+  const [category, setCategory] = useState<StoredCategory | null>(null);
+  const [subcategory, setSubcategory] = useState<StoredSubcategory | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState('');
   const [subcategoryId, setSubcategoryId] = useState('');
   const [audioFile, setAudioFile] = useState<{ uri: string; name: string } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const saveAnim = useRef(new Animated.Value(0)).current;
+  const isSavingRef = useRef(false);
 
   const [categories, setCategories] = useState<StoredCategory[]>([]);
   const [subcategories, setSubcategories] = useState<StoredSubcategory[]>([]);
@@ -83,9 +85,16 @@ export default function EditAudioScreen() {
     setDescription(found.description ?? '');
     setCategoryId(found.categoryId);
     setSubcategoryId(found.subcategoryId ?? '');
-    const subs = await getSubcategoriesByCategory(found.categoryId);
+
+    const [subs, cat, qs] = await Promise.all([
+      getSubcategoriesByCategory(found.categoryId),
+      getCategoryById(found.categoryId),
+      getQuizzesByTrack(id ?? ''),
+    ]);
     setSubcategories(subs);
-    const qs = await getQuizzesByTrack(id ?? '');
+    setCategory(cat);
+    const sub = subs.find(s => s.id === found.subcategoryId) ?? null;
+    setSubcategory(sub);
     setQuizzes(qs.map(q => ({
       id: q.id, question: q.question,
       options: [q.options[0], q.options[1], q.options[2]] as [string, string, string],
@@ -96,8 +105,19 @@ export default function EditAudioScreen() {
   async function handleCategoryChange(catId: string) {
     setCategoryId(catId);
     setSubcategoryId('');
-    const subs = await getSubcategoriesByCategory(catId);
+    const [subs, cat] = await Promise.all([
+      getSubcategoriesByCategory(catId),
+      getCategoryById(catId),
+    ]);
     setSubcategories(subs);
+    setCategory(cat);
+    setSubcategory(null);
+  }
+
+  function handleSubcategoryChange(subId: string) {
+    setSubcategoryId(subId);
+    const sub = subcategories.find(s => s.id === subId) ?? null;
+    setSubcategory(sub);
   }
 
   async function pickAudio() {
@@ -110,8 +130,18 @@ export default function EditAudioScreen() {
     } catch { Alert.alert('பிழை', 'Audio file தேர்ந்தெடுக்க முடியவில்லை'); }
   }
 
+  function flashSuccess() {
+    Animated.sequence([
+      Animated.timing(saveAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      Animated.delay(1800),
+      Animated.timing(saveAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+    ]).start();
+  }
+
   async function handleSave() {
+    if (isSavingRef.current) return;
     if (!title.trim()) { Alert.alert('தவறு', 'Title உள்ளிடுங்க'); return; }
+    isSavingRef.current = true;
     setSaving(true);
     try {
       const selectedCat = categories.find(c => c.id === categoryId);
@@ -128,10 +158,10 @@ export default function EditAudioScreen() {
         updates.fileName = audioFile.name;
       }
       await updateTrack(id!, updates);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 1800);
+      flashSuccess();
+      // ✅ Stay on this screen — do NOT navigate back
     } catch { Alert.alert('பிழை', 'சேமிக்க முடியவில்லை'); }
-    finally { setSaving(false); }
+    finally { setSaving(false); isSavingRef.current = false; }
   }
 
   function handleDeleteTrack() {
@@ -177,7 +207,9 @@ export default function EditAudioScreen() {
     if (!q.id || !q.question.trim()) return;
     if (q.options.some(o => !o.trim())) { Alert.alert('தவறு', 'மூன்று விடைகளும் உள்ளிடுங்க'); return; }
     try {
-      await updateQuiz(q.id, { question: q.question.trim(), options: q.options.map(o => o.trim()), correctIndex: q.correctIndex });
+      await updateQuiz(q.id, {
+        question: q.question.trim(), options: q.options.map(o => o.trim()), correctIndex: q.correctIndex,
+      });
       toggleEditQuiz(idx);
     } catch { Alert.alert('பிழை', 'Quiz update பண்ண முடியவில்லை'); }
   }
@@ -192,6 +224,8 @@ export default function EditAudioScreen() {
     ]);
   }
 
+  const accentColor = category?.color ?? '#f0bc42';
+
   if (!track) {
     return <View style={styles.centered}><ActivityIndicator color="#f0bc42" size="large" /></View>;
   }
@@ -200,21 +234,56 @@ export default function EditAudioScreen() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.topBar}>
+      {/* Top Bar */}
+      <View style={[styles.topBar, { borderBottomColor: accentColor + '33' }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backTxt}>‹ திரும்பு</Text>
+          <Text style={[styles.backTxt, { color: accentColor }]}>‹ திரும்பு</Text>
         </TouchableOpacity>
-        <Text style={styles.topTitle}>✏️ Edit Audio</Text>
-        <View style={{ width: 64 }} />
+        <Text style={styles.topTitle} numberOfLines={1}>✏️ {track.title}</Text>
+        <TouchableOpacity
+          style={[styles.topSaveBtn, saving && { opacity: 0.6 }]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving
+            ? <ActivityIndicator color="#000" size="small" />
+            : <Text style={styles.topSaveTxt}>சேமி</Text>}
+        </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {saved && (
-          <View style={styles.savedBanner}>
-            <Text style={styles.savedTxt}>✅ வெற்றிகரமாக சேமிக்கப்பட்டது!</Text>
-          </View>
+      {/* Breadcrumb */}
+      <View style={styles.breadcrumb}>
+        <Text style={styles.bcItem} onPress={() => router.push('/admin')}>Admin</Text>
+        <Text style={styles.bcSep}> › </Text>
+        {category && (
+          <>
+            <Text
+              style={styles.bcItem}
+              onPress={() => router.push(`/admin/category/${category.id}` as any)}
+            >
+              {category.name}
+            </Text>
+            <Text style={styles.bcSep}> › </Text>
+          </>
         )}
+        {subcategory && (
+          <>
+            <Text style={styles.bcItem}>{subcategory.name}</Text>
+            <Text style={styles.bcSep}> › </Text>
+          </>
+        )}
+        <Text style={[styles.bcActive, { color: accentColor }]} numberOfLines={1}>
+          {track.title}
+        </Text>
+      </View>
 
+      {/* Animated success banner */}
+      <Animated.View style={[styles.successBanner, { opacity: saveAnim }]}>
+        <Text style={styles.successBannerTxt}>✅ வெற்றிகரமாக சேமிக்கப்பட்டது!</Text>
+        <Text style={styles.successBannerNote}>இந்த திரையிலேயே தொடரலாம்</Text>
+      </Animated.View>
+
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         {track.isBuiltIn && (
           <View style={styles.builtInNotice}>
             <Text style={styles.builtInNoticeTxt}>
@@ -229,7 +298,10 @@ export default function EditAudioScreen() {
           <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholderTextColor="#444" placeholder="Audio title" />
 
           <Text style={styles.fieldLabel}>Description</Text>
-          <TextInput style={[styles.input, styles.textArea]} value={description} onChangeText={setDescription} placeholderTextColor="#444" placeholder="விவரம் (optional)" multiline numberOfLines={2} />
+          <TextInput
+            style={[styles.input, styles.textArea]} value={description} onChangeText={setDescription}
+            placeholderTextColor="#444" placeholder="விவரம் (optional)" multiline numberOfLines={2}
+          />
 
           <Text style={styles.fieldLabel}>Category</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
@@ -250,18 +322,18 @@ export default function EditAudioScreen() {
               <Text style={styles.fieldLabel}>Subcategory (Optional)</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
                 <TouchableOpacity
-                  style={[styles.chip, !subcategoryId && { backgroundColor: '#f0bc4222', borderColor: '#f0bc42' }]}
+                  style={[styles.chip, !subcategoryId && { backgroundColor: accentColor + '22', borderColor: accentColor }]}
                   onPress={() => setSubcategoryId('')}
                 >
-                  <Text style={[styles.chipTxt, !subcategoryId && { color: '#f0bc42' }]}>None</Text>
+                  <Text style={[styles.chipTxt, !subcategoryId && { color: accentColor }]}>None</Text>
                 </TouchableOpacity>
                 {subcategories.map(sub => (
                   <TouchableOpacity
                     key={sub.id}
-                    style={[styles.chip, subcategoryId === sub.id && { backgroundColor: '#f0bc4222', borderColor: '#f0bc42' }]}
-                    onPress={() => setSubcategoryId(sub.id)}
+                    style={[styles.chip, subcategoryId === sub.id && { backgroundColor: accentColor + '22', borderColor: accentColor }]}
+                    onPress={() => handleSubcategoryChange(sub.id)}
                   >
-                    <Text style={[styles.chipTxt, subcategoryId === sub.id && { color: '#f0bc42' }]}>{sub.name}</Text>
+                    <Text style={[styles.chipTxt, subcategoryId === sub.id && { color: accentColor }]}>{sub.name}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -286,15 +358,23 @@ export default function EditAudioScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.saveRow}>
-          <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
-            {saving ? <ActivityIndicator color="#000" /> : <Text style={styles.saveBtnTxt}>💾 மாற்றங்களை சேமி</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.deleteTrackBtn} onPress={handleDeleteTrack}>
-            <Text style={styles.deleteTrackTxt}>🗑️</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Main Save Button (large, prominent) */}
+        <TouchableOpacity
+          style={[styles.mainSaveBtn, { backgroundColor: accentColor }, saving && { opacity: 0.6 }]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving
+            ? <ActivityIndicator color="#000" />
+            : <Text style={styles.mainSaveBtnTxt}>💾 மாற்றங்களை சேமி</Text>}
+        </TouchableOpacity>
+        <Text style={styles.saveNote}>சேமித்த பிறகு இந்த திரையிலேயே இருப்பீர்கள்</Text>
 
+        <TouchableOpacity style={styles.deleteTrackRow} onPress={handleDeleteTrack}>
+          <Text style={styles.deleteTrackTxt}>🗑️ இந்த track-ஐ நீக்கு</Text>
+        </TouchableOpacity>
+
+        {/* Quiz Section */}
         <View style={styles.quizSection}>
           <View style={styles.quizHeader}>
             <Text style={styles.sectionLabel}>🎮 Quiz Questions ({quizzes.length})</Text>
@@ -359,16 +439,15 @@ export default function EditAudioScreen() {
               <Text style={styles.quizNewTitle}>புதிய கேள்வி சேர்க்கவும்</Text>
               <Text style={styles.fieldLabel}>கேள்வி *</Text>
               <TextInput style={[styles.input, styles.textArea]} value={newQ} onChangeText={setNewQ} placeholderTextColor="#444" placeholder="கேள்வியை உள்ளிடுங்க..." multiline numberOfLines={2} />
-              <Text style={styles.fieldLabel}>விடைகள் (சரியான விடையை tap பண்ணி select பண்ணுங்க) *</Text>
+              <Text style={styles.fieldLabel}>விடைகள் *</Text>
               {newOpts.map((opt, oi) => (
                 <TouchableOpacity key={oi} style={[styles.editOptRow, newCorrect === oi && styles.editOptRowCorrect]} onPress={() => setNewCorrect(oi)}>
                   <View style={[styles.optBadge, newCorrect === oi && styles.optBadgeCorrect]}>
                     <Text style={styles.optBadgeTxt}>{String.fromCharCode(65 + oi)}</Text>
                   </View>
                   <TextInput
-                    style={styles.editOptInput}
-                    value={opt}
-                    onChangeText={v => { const copy = [...newOpts] as [string, string, string]; copy[oi] = v; setNewOpts(copy); }}
+                    style={styles.editOptInput} value={opt}
+                    onChangeText={v => { const c = [...newOpts] as [string, string, string]; c[oi] = v; setNewOpts(c); }}
                     placeholderTextColor="#444" placeholder={`விடை ${oi + 1}`}
                   />
                   {newCorrect === oi && <Text style={styles.correctMark}>✓</Text>}
@@ -405,18 +484,32 @@ const styles = StyleSheet.create({
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingTop: 56, paddingBottom: 14,
-    backgroundColor: '#0e0e0e', borderBottomWidth: 1, borderBottomColor: '#1e1e1e',
+    backgroundColor: '#0e0e0e', borderBottomWidth: 1,
   },
   backBtn: { padding: 4, minWidth: 64 },
-  backTxt: { color: '#f0bc42', fontSize: 18, fontWeight: '600' },
-  topTitle: { color: '#fff', fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  backTxt: { fontSize: 17, fontWeight: '600' },
+  topTitle: { color: '#fff', fontSize: 14, fontWeight: '700', flex: 1, textAlign: 'center' },
+  topSaveBtn: {
+    backgroundColor: '#f0bc42', borderRadius: 8,
+    paddingHorizontal: 14, paddingVertical: 7, minWidth: 56, alignItems: 'center',
+  },
+  topSaveTxt: { color: '#000', fontSize: 13, fontWeight: '800' },
+  breadcrumb: {
+    flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap',
+    paddingHorizontal: 16, paddingVertical: 8,
+    borderBottomWidth: 1, borderBottomColor: '#1a1a1a', backgroundColor: '#0e0e0e',
+  },
+  bcItem: { color: '#888', fontSize: 11 },
+  bcSep: { color: '#444', fontSize: 11 },
+  bcActive: { fontSize: 11, fontWeight: '700' },
+  successBanner: {
+    backgroundColor: '#0a2010', borderBottomWidth: 1, borderBottomColor: '#1a4020',
+    paddingVertical: 10, paddingHorizontal: 16, alignItems: 'center', gap: 2,
+  },
+  successBannerTxt: { color: '#4CAF50', fontSize: 14, fontWeight: '800' },
+  successBannerNote: { color: '#2a8040', fontSize: 11 },
   scroll: { flex: 1 },
   scrollContent: { padding: 16 },
-  savedBanner: {
-    backgroundColor: '#0a2010', borderRadius: 10, padding: 12,
-    marginBottom: 14, borderWidth: 1, borderColor: '#1a4020', alignItems: 'center',
-  },
-  savedTxt: { color: '#4CAF50', fontSize: 14, fontWeight: '700' },
   builtInNotice: {
     backgroundColor: '#0a0f2e', borderRadius: 10, padding: 12,
     marginBottom: 14, borderWidth: 1, borderColor: '#2196F333',
@@ -449,16 +542,16 @@ const styles = StyleSheet.create({
   fileHint: { color: '#888', fontSize: 12, textAlign: 'center' },
   fileSelected: { color: '#f0bc42', fontSize: 13, fontWeight: '600', textAlign: 'center' },
   fileChange: { color: '#555', fontSize: 11, marginTop: 4 },
-  saveRow: { flexDirection: 'row', gap: 10, marginBottom: 24 },
-  saveBtn: {
-    flex: 1, backgroundColor: '#f0bc42', borderRadius: 10, padding: 15, alignItems: 'center',
+  mainSaveBtn: {
+    borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 8,
   },
-  saveBtnTxt: { color: '#000', fontSize: 15, fontWeight: '800' },
-  deleteTrackBtn: {
-    backgroundColor: '#200', borderRadius: 10, width: 50,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#500',
+  mainSaveBtnTxt: { color: '#000', fontSize: 16, fontWeight: '800' },
+  saveNote: { color: '#555', fontSize: 11, textAlign: 'center', marginBottom: 16 },
+  deleteTrackRow: {
+    backgroundColor: '#1a0505', borderRadius: 10, padding: 14, alignItems: 'center',
+    borderWidth: 1, borderColor: '#4a1515', marginBottom: 24,
   },
-  deleteTrackTxt: { fontSize: 22 },
+  deleteTrackTxt: { color: '#ff6b6b', fontSize: 14, fontWeight: '600' },
   quizSection: { marginBottom: 16 },
   quizHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   addQuizBtn: {
@@ -488,10 +581,7 @@ const styles = StyleSheet.create({
   quizEditTxt: { color: '#f0bc42', fontSize: 12, fontWeight: '600' },
   quizDeleteBtn: { borderWidth: 1, borderColor: '#ff6b6b44', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
   quizDeleteTxt: { color: '#ff6b6b', fontSize: 12, fontWeight: '600' },
-  quizSaveBtn: {
-    backgroundColor: '#4CAF50', borderRadius: 8,
-    paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', gap: 4, alignItems: 'center',
-  },
+  quizSaveBtn: { backgroundColor: '#4CAF50', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, flexDirection: 'row', gap: 4, alignItems: 'center' },
   quizSaveTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
   quizCancelBtn: { backgroundColor: '#1e1e1e', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
   quizCancelTxt: { color: '#888', fontSize: 13 },

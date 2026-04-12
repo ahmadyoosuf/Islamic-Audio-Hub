@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import AudioPlayer from "@/components/AudioPlayer";
 import { useApp } from "@/context/AppContext";
-import { getAllTracks } from "@/data/categories";
+import { getAllTracks } from "@/data/unifiedStorage";
 import { useColors } from "@/hooks/useColors";
 
 export default function ProfileScreen() {

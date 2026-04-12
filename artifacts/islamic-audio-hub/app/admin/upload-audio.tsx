@@ -1,38 +1,30 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-  Platform,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ScrollView, ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
-import { addTrack } from '../../data/unifiedStorage';
-import { CATEGORIES } from '../../data/categories';
+import {
+  addTrack,
+  getAllCategories,
+  getSubcategoriesByCategory,
+  type StoredCategory,
+  type StoredSubcategory,
+} from '../../data/unifiedStorage';
 
 async function persistAudioFile(uri: string, fileName: string): Promise<string> {
-  if (Platform.OS === 'web') {
-    return uri;
-  }
+  if (Platform.OS === 'web') return uri;
   try {
     const dir = FileSystem.documentDirectory + 'audio/';
     const dirInfo = await FileSystem.getInfoAsync(dir);
-    if (!dirInfo.exists) {
-      await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
-    }
-    const safeFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const destPath = dir + Date.now() + '_' + safeFileName;
-    await FileSystem.copyAsync({ from: uri, to: destPath });
-    console.log('[Upload] Audio persisted to:', destPath);
-    return destPath;
+    if (!dirInfo.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+    const safe = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const dest = dir + Date.now() + '_' + safe;
+    await FileSystem.copyAsync({ from: uri, to: dest });
+    return dest;
   } catch (err) {
-    console.warn('[Upload] Failed to persist audio file, using original URI:', err);
     return uri;
   }
 }
@@ -40,20 +32,35 @@ async function persistAudioFile(uri: string, fileName: string): Promise<string> 
 export default function UploadAudioScreen() {
   const router = useRouter();
   const { preselectedCategory } = useLocalSearchParams<{ preselectedCategory?: string }>();
+
+  const [categories, setCategories] = useState<StoredCategory[]>([]);
+  const [subcategories, setSubcategories] = useState<StoredSubcategory[]>([]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [categoryId, setCategoryId] = useState(preselectedCategory ?? 'quran');
+  const [categoryId, setCategoryId] = useState(preselectedCategory ?? '');
+  const [subcategoryId, setSubcategoryId] = useState('');
   const [audioFile, setAudioFile] = useState<{ uri: string; name: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  useEffect(() => {
+    getAllCategories().then(cats => {
+      setCategories(cats);
+      if (!categoryId && cats.length > 0) setCategoryId(cats[0].id);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!categoryId) { setSubcategories([]); return; }
+    getSubcategoriesByCategory(categoryId).then(subs => {
+      setSubcategories(subs);
+      setSubcategoryId('');
+    });
+  }, [categoryId]);
+
   async function pickAudio() {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'audio/*',
-        copyToCacheDirectory: true,
-      });
-
+      const result = await DocumentPicker.getDocumentAsync({ type: 'audio/*', copyToCacheDirectory: true });
       if (!result.canceled && result.assets.length > 0) {
         const asset = result.assets[0];
         setAudioFile({ uri: asset.uri, name: asset.name });
@@ -64,28 +71,20 @@ export default function UploadAudioScreen() {
   }
 
   async function handleUpload() {
-    if (!title.trim()) {
-      Alert.alert('தவறு', 'Title உள்ளிடுங்க');
-      return;
-    }
-    if (!audioFile) {
-      Alert.alert('தவறு', 'Audio file தேர்ந்தெடுங்க');
-      return;
-    }
-
+    if (!title.trim()) { Alert.alert('தவறு', 'Title உள்ளிடுங்க'); return; }
+    if (!audioFile) { Alert.alert('தவறு', 'Audio file தேர்ந்தெடுங்க'); return; }
+    if (!categoryId) { Alert.alert('தவறு', 'Category தேர்ந்தெடுங்க'); return; }
     setLoading(true);
-
     try {
       const persistedUri = await persistAudioFile(audioFile.uri, audioFile.name);
-      console.log('[Upload] Final audio URI:', persistedUri);
-
-      const selectedCategory = CATEGORIES.find(c => c.id === categoryId);
-      const track = {
+      const selectedCat = categories.find(c => c.id === categoryId);
+      await addTrack({
         id: `custom_${Date.now()}`,
         title: title.trim(),
         description: description.trim(),
         categoryId,
-        categoryName: selectedCategory?.name || categoryId,
+        categoryName: selectedCat?.name ?? categoryId,
+        subcategoryId: subcategoryId || undefined,
         audioUrl: persistedUri,
         fileName: audioFile.name,
         uploadedAt: Date.now(),
@@ -95,14 +94,9 @@ export default function UploadAudioScreen() {
         sortOrder: 9999,
         hasQuiz: false,
         isBuiltIn: false,
-      };
-
-      await addTrack(track);
+      });
       setSuccess(true);
-
-      setTimeout(() => {
-        router.back();
-      }, 2000);
+      setTimeout(() => router.back(), 2000);
     } catch {
       Alert.alert('பிழை', 'Upload பண்ண முடியவில்லை');
     } finally {
@@ -151,22 +145,41 @@ export default function UploadAudioScreen() {
       />
 
       <Text style={styles.label}>Category *</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryScroll}>
-        {CATEGORIES.map(cat => (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+        {categories.map(cat => (
           <TouchableOpacity
             key={cat.id}
-            style={[
-              styles.categoryChip,
-              categoryId === cat.id && { backgroundColor: cat.color + '33', borderColor: cat.color },
-            ]}
+            style={[styles.chip, categoryId === cat.id && { backgroundColor: cat.color + '33', borderColor: cat.color }]}
             onPress={() => setCategoryId(cat.id)}
           >
-            <Text style={[styles.categoryChipText, categoryId === cat.id && { color: cat.color }]}>
-              {cat.name}
-            </Text>
+            <Text style={styles.chipIcon}>{cat.icon}</Text>
+            <Text style={[styles.chipTxt, categoryId === cat.id && { color: cat.color }]}>{cat.name}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
+
+      {subcategories.length > 0 && (
+        <>
+          <Text style={styles.label}>Subcategory (Optional)</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+            <TouchableOpacity
+              style={[styles.chip, !subcategoryId && styles.chipActive]}
+              onPress={() => setSubcategoryId('')}
+            >
+              <Text style={[styles.chipTxt, !subcategoryId && { color: '#f0bc42' }]}>None</Text>
+            </TouchableOpacity>
+            {subcategories.map(sub => (
+              <TouchableOpacity
+                key={sub.id}
+                style={[styles.chip, subcategoryId === sub.id && styles.chipActive]}
+                onPress={() => setSubcategoryId(sub.id)}
+              >
+                <Text style={[styles.chipTxt, subcategoryId === sub.id && { color: '#f0bc42' }]}>{sub.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </>
+      )}
 
       <Text style={styles.label}>Audio File (MP3) *</Text>
       <TouchableOpacity style={styles.filePicker} onPress={pickAudio}>
@@ -184,26 +197,12 @@ export default function UploadAudioScreen() {
         )}
       </TouchableOpacity>
 
-      {audioFile && (
-        <View style={styles.audioInfo}>
-          <Text style={styles.audioInfoLabel}>📋 File Info</Text>
-          <Text style={styles.audioInfoText}>Name: {audioFile.name}</Text>
-          <Text style={styles.audioInfoUri} numberOfLines={2}>
-            URI: {audioFile.uri.substring(0, 60)}...
-          </Text>
-        </View>
-      )}
-
       <TouchableOpacity
         style={[styles.uploadBtn, loading && { opacity: 0.6 }]}
         onPress={handleUpload}
         disabled={loading}
       >
-        {loading ? (
-          <ActivityIndicator color="#0a0a0a" />
-        ) : (
-          <Text style={styles.uploadBtnText}>⬆️ Upload பண்ணு</Text>
-        )}
+        {loading ? <ActivityIndicator color="#0a0a0a" /> : <Text style={styles.uploadBtnText}>⬆️ Upload பண்ணு</Text>}
       </TouchableOpacity>
     </ScrollView>
   );
@@ -217,66 +216,31 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#fff', fontSize: 20, fontWeight: '700' },
   label: { color: '#aaa', fontSize: 13, marginBottom: 6, marginTop: 16 },
   input: {
-    backgroundColor: '#1a1a1a',
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
-    borderRadius: 8,
-    padding: 14,
-    fontSize: 15,
-    color: '#fff',
+    backgroundColor: '#1a1a1a', borderWidth: 1, borderColor: '#2a2a2a',
+    borderRadius: 8, padding: 14, fontSize: 15, color: '#fff',
   },
   textArea: { height: 80, textAlignVertical: 'top' },
-  categoryScroll: { marginBottom: 4 },
-  categoryChip: {
-    borderWidth: 1,
-    borderColor: '#333',
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginRight: 8,
-    marginVertical: 4,
+  chipScroll: { marginBottom: 4 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderColor: '#333', borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 8, marginRight: 8, marginVertical: 4,
   },
-  categoryChipText: { color: '#888', fontSize: 13 },
+  chipActive: { backgroundColor: '#f0bc4222', borderColor: '#f0bc42' },
+  chipIcon: { fontSize: 16 },
+  chipTxt: { color: '#888', fontSize: 13 },
   filePicker: {
-    backgroundColor: '#1a1a1a',
-    borderWidth: 2,
-    borderColor: '#2a2a2a',
-    borderStyle: 'dashed',
-    borderRadius: 12,
-    padding: 28,
-    alignItems: 'center',
+    backgroundColor: '#1a1a1a', borderWidth: 2, borderColor: '#2a2a2a',
+    borderStyle: 'dashed', borderRadius: 12, padding: 28, alignItems: 'center',
   },
   filePickerIcon: { fontSize: 36, textAlign: 'center', marginBottom: 8 },
   filePickerText: { color: '#666', fontSize: 14, textAlign: 'center' },
   filePickerName: { color: '#f0bc42', fontSize: 14, fontWeight: '600', textAlign: 'center' },
   filePickerChange: { color: '#666', fontSize: 12, textAlign: 'center', marginTop: 4 },
-  audioInfo: {
-    backgroundColor: '#111',
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
-  },
-  audioInfoLabel: { color: '#f0bc42', fontSize: 12, fontWeight: '700', marginBottom: 6 },
-  audioInfoText: { color: '#888', fontSize: 12, marginBottom: 4 },
-  audioInfoUri: { color: '#555', fontSize: 11 },
-  uploadBtn: {
-    backgroundColor: '#f0bc42',
-    borderRadius: 10,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 28,
-  },
+  uploadBtn: { backgroundColor: '#f0bc42', borderRadius: 10, padding: 16, alignItems: 'center', marginTop: 28 },
   uploadBtnText: { color: '#0a0a0a', fontSize: 16, fontWeight: '700' },
-  successContainer: {
-    flex: 1,
-    backgroundColor: '#0a0a0a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
+  successContainer: { flex: 1, backgroundColor: '#0a0a0a', justifyContent: 'center', alignItems: 'center', padding: 40 },
   successIcon: { fontSize: 72, marginBottom: 20 },
-  successTitle: { color: '#4CAF50', fontSize: 22, fontWeight: '700', textAlign: 'center' },
-  successSub: { color: '#888', fontSize: 15, textAlign: 'center', marginTop: 8 },
+  successTitle: { color: '#fff', fontSize: 22, fontWeight: '700', marginBottom: 8 },
+  successSub: { color: '#888', fontSize: 15 },
 });

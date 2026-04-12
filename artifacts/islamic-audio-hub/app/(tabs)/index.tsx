@@ -343,6 +343,23 @@ export default function HomeScreen() {
           ))}
         </View>
 
+        <Pressable
+          onPress={() => router.push('/cms' as any)}
+          style={[styles.libraryBanner, isDark ? styles.libraryBannerDark : styles.libraryBannerLight]}
+        >
+          <View style={styles.libraryBannerLeft}>
+            <Text style={styles.libraryBannerIcon}>📚</Text>
+            <View>
+              <Text style={styles.libraryBannerTitle}>Library</Text>
+              <Text style={styles.libraryBannerSub}>Categories → Cards → Tracks</Text>
+            </View>
+          </View>
+          <View style={[styles.libraryBannerBadge, { backgroundColor: '#9C27B022' }]}>
+            <Text style={[styles.libraryBannerBadgeTxt, { color: '#9C27B0' }]}>புதியது</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color="#9C27B0" />
+        </Pressable>
+
         <TodaysFreeTrack isDark={isDark} tracks={allTracks} />
 
         <View style={styles.toggleRow}>
@@ -504,4 +521,22 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     height: 36,
   },
+  libraryBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    marginBottom: 14,
+  },
+  libraryBannerDark: { backgroundColor: "#0e0e18", borderColor: "#9C27B044" },
+  libraryBannerLight: { backgroundColor: "#f3eeff", borderColor: "#9C27B044" },
+  libraryBannerLeft: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12 },
+  libraryBannerIcon: { fontSize: 28 },
+  libraryBannerTitle: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  libraryBannerSub: { color: "#9C27B0", fontSize: 11, marginTop: 2, fontWeight: "600" },
+  libraryBannerBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 4 },
+  libraryBannerBadgeTxt: { fontSize: 11, fontWeight: "700" },
 });

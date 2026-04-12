@@ -35,7 +35,12 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Data architecture**: Unified storage (`data/unifiedStorage.ts`) is the single source of truth. Seeds 106 built-in tracks + quiz questions from `data/categories.ts` into AsyncStorage on first launch. All CRUD goes through unifiedStorage — no more direct imports of TRACKS/QUIZ_QUESTIONS in UI code.
   - Storage keys: `db_tracks_v4`, `db_quizzes_v4`, `db_initialized_v4`
   - Functions: `initDB`, `getAllTracks`, `getTracksByCategory`, `getTrackById`, `addTrack`, `updateTrack`, `deleteTrack`, `saveQuiz`, `updateQuiz`, `deleteQuiz`, `getQuizzesByTrack`, `getCategoryTrackCounts`
-- **Admin CMS**: `app/admin/` — login (`admin@example.com` / `123456`), category view with edit/delete on all tracks, upload audio, edit audio with quiz management
+- **Admin CMS (Audio)**: `app/admin/` — login (`admin@example.com` / `123456`), category view with drag-to-reorder, edit/delete all tracks, upload audio, edit audio with quiz management
+- **Library CMS (Hierarchical)**: 5-level content hierarchy stored in AsyncStorage (`data/cmsStorage.ts`):
+  - Storage keys: `cms_categories_v1`, `cms_subcategories_v1`, `cms_cards_v1`, `cms_tracks_v1`, `cms_quizzes_v1`
+  - **Admin flow**: `/admin/cms` → category CRUD → `/admin/cms/sub` → subcategory CRUD → `/admin/cms/cards` → card CRUD (with track counts) → `/admin/cms/card` → track management (add/edit/delete/reorder + inline quiz editor)
+  - **Frontend flow**: `/cms` → category grid → `/cms/sub` → subcategory list → `/cms/cards` → card list (with track count badge) → `/cms/card` → track list → `/cms/track/[id]` → audio player with quiz modal + share
+  - Home screen has Library banner (purple, "புதியது" badge) below the 5 categories
 - **5-tab nav**: Home, Favorites (பிடித்தவை), Profile (சுயவிவரம்), About (பற்றி), Request (கோரிக்கை — opens modal)
 
 ## Key Commands

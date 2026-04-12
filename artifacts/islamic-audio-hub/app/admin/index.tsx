@@ -130,6 +130,25 @@ export default function AdminDashboard() {
         );
       })}
 
+      <View style={styles.divider} />
+      <Text style={styles.sectionTitle}>📚 Library CMS</Text>
+      <Text style={styles.sectionSub}>Categories → Subcategories → Cards → Tracks — full hierarchy management</Text>
+
+      <TouchableOpacity
+        style={styles.cmsCard}
+        onPress={() => router.push('/admin/cms' as any)}
+        activeOpacity={0.75}
+      >
+        <View style={[styles.catIconBox, { backgroundColor: '#9C27B022' }]}>
+          <Text style={styles.catIcon}>📚</Text>
+        </View>
+        <View style={styles.catInfo}>
+          <Text style={styles.catName}>Library Management</Text>
+          <Text style={styles.catMeta}>Categories, Subcategories, Cards, Tracks, Quiz</Text>
+        </View>
+        <Text style={[styles.catArrow, { color: '#9C27B0' }]}>›</Text>
+      </TouchableOpacity>
+
       <View style={{ height: 40 }} />
     </ScrollView>
   );
@@ -211,4 +230,16 @@ const styles = StyleSheet.create({
   },
   catBadgeText: { fontSize: 14, fontWeight: '800' },
   catArrow: { color: '#444', fontSize: 24, fontWeight: '300' },
+  divider: { height: 1, backgroundColor: '#1e1e1e', marginVertical: 20 },
+  cmsCard: {
+    backgroundColor: '#0e0a18',
+    borderRadius: 14,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#9C27B033',
+  },
 });

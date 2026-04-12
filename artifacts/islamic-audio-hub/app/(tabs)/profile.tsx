@@ -7,10 +7,12 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
   useColorScheme,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import AudioPlayer from "@/components/AudioPlayer";
 import { useApp } from "@/context/AppContext";
 import { getAllTracks } from "@/data/categories";
@@ -21,6 +23,7 @@ export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { favorites, recentTracks, isDarkMode, toggleDarkMode, playbackProgress } = useApp();
 
   const totalListened = Object.values(playbackProgress).reduce(
@@ -204,6 +207,33 @@ export default function ProfileScreen() {
             />
           </View>
         </View>
+
+        <View style={styles.settingsSection}>
+          <TouchableOpacity
+            style={[
+              styles.adminButton,
+              { backgroundColor: isDark ? "#1a1510" : "#fef9ec" },
+            ]}
+            onPress={() => router.push('/admin/login')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.adminButtonLeft}>
+              <View style={styles.adminIconBox}>
+                <Ionicons name="shield-checkmark" size={20} color="#f0bc42" />
+              </View>
+              <View>
+                <Text style={[styles.adminBtnTitle, { color: isDark ? "#f0bc42" : "#b8860b" }]}>
+                  Admin Panel
+                </Text>
+                <Text style={[styles.adminBtnSub, { color: isDark ? "#888" : "#aaa" }]}>
+                  Audio & Quiz நிர்வாகம்
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#f0bc42" />
+          </TouchableOpacity>
+        </View>
+
       </ScrollView>
 
       <View
@@ -462,6 +492,36 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 10,
     position: "absolute",
+  },
+  adminButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#f0bc4244",
+  },
+  adminButtonLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  adminIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "#f0bc4222",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adminBtnTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  adminBtnSub: {
+    fontSize: 12,
+    marginTop: 2,
   },
   playerBar: {
     position: "absolute",

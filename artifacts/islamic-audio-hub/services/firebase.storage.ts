@@ -14,10 +14,21 @@ export interface UploadProgress {
 }
 
 /**
- * Upload an audio file to Firebase Storage under `audio/<filename>`.
- * Returns a promise that resolves with the public download URL.
- * Calls `onProgress` with live progress updates.
+ * Fetch a local file URI as a Blob using XMLHttpRequest.
+ * fetch() fails silently on local file:// and content:// URIs in React Native.
+ * XMLHttpRequest with responseType="blob" is the only reliable approach.
  */
+function uriBlobXHR(uri: string): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.onload  = () => resolve(xhr.response as Blob);
+    xhr.onerror = () => reject(new Error(`Failed to read file: ${uri}`));
+    xhr.responseType = "blob";
+    xhr.open("GET", uri, true);
+    xhr.send(null);
+  });
+}
+
 export function uploadAudio(
   uri:        string,
   filename:   string,
@@ -25,8 +36,13 @@ export function uploadAudio(
 ): Promise<string> {
   return new Promise(async (resolve, reject) => {
     try {
-      const response = await fetch(uri);
-      const blob     = await response.blob();
+      // Use XHR to convert local file URI → Blob (fetch fails on React Native)
+      const blob = await uriBlobXHR(uri);
+
+      if (!blob || blob.size === 0) {
+        reject(new Error("கோப்பு படிக்க முடியவில்லை — blob காலியாக உள்ளது"));
+        return;
+      }
 
       const storageRef: StorageReference = ref(storage, `audio/${filename}`);
       const task = uploadBytesResumable(storageRef, blob);
@@ -41,7 +57,10 @@ export function uploadAudio(
             percent: totalBytes > 0 ? Math.round((bytesTransferred / totalBytes) * 100) : 0,
           });
         },
-        err => reject(err),
+        err => {
+          console.error("[Storage] upload error:", err.code, err.message, err.serverResponse);
+          reject(err);
+        },
         async () => {
           try {
             const url = await getDownloadURL(task.snapshot.ref);
@@ -52,6 +71,7 @@ export function uploadAudio(
         }
       );
     } catch (e) {
+      console.error("[Storage] uploadAudio exception:", e);
       reject(e);
     }
   });

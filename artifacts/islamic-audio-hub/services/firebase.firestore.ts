@@ -1,5 +1,6 @@
 import {
   collection,
+  collectionGroup,
   doc,
   addDoc,
   updateDoc,
@@ -207,7 +208,9 @@ export async function getCardById(id: string): Promise<FBCard | null> {
 }
 
 export async function getCards(subcategoryId?: string, categoryId?: string): Promise<FBCard[]> {
-  const snap = await getDocs(collection(db, "cards"));
+  // collectionGroup("cards") finds cards in ANY collection named "cards",
+  // whether top-level or nested as a subcollection under categories.
+  const snap = await getDocs(collectionGroup(db, "cards"));
   let all = snap.docs
     .map(d => toFBCard(d.id, d.data() as Record<string, any>))
     .sort(bySort);
@@ -254,7 +257,7 @@ export function subscribeCardsByCategory(
   onError?: (e: Error) => void
 ): Unsubscribe {
   return onSnapshot(
-    collection(db, "cards"),
+    collectionGroup(db, "cards"),
     snap => {
       const cards = snap.docs
         .map(d => toFBCard(d.id, d.data() as Record<string, any>))
@@ -339,7 +342,9 @@ export function subscribeCards(
   onData: (cards: FBCard[]) => void,
   onError?: (e: Error) => void
 ): Unsubscribe {
-  getDocs(collection(db, "cards"))
+  // collectionGroup finds cards whether stored as top-level collection
+  // OR as a subcollection under categories/{id}/cards
+  getDocs(collectionGroup(db, "cards"))
     .then(snap => {
       const cards = snap.docs
         .map(d => toFBCard(d.id, d.data() as Record<string, any>))
@@ -351,7 +356,7 @@ export function subscribeCards(
     .catch(err => console.error("[Firebase] getDocs cards FAILED:", err.code, err.message));
 
   return onSnapshot(
-    collection(db, "cards"),
+    collectionGroup(db, "cards"),
     snap => {
       const cards = snap.docs
         .map(d => toFBCard(d.id, d.data() as Record<string, any>))
@@ -370,7 +375,7 @@ export function subscribeAllCards(
   onData: (cards: FBCard[]) => void,
   onError?: (e: Error) => void
 ): Unsubscribe {
-  getDocs(collection(db, "cards"))
+  getDocs(collectionGroup(db, "cards"))
     .then(snap => {
       const cards = snap.docs
         .map(d => toFBCard(d.id, d.data() as Record<string, any>))
@@ -381,7 +386,7 @@ export function subscribeAllCards(
     .catch(err => console.error("[Firebase] getDocs allCards FAILED:", err.code, err.message));
 
   return onSnapshot(
-    collection(db, "cards"),
+    collectionGroup(db, "cards"),
     snap => {
       const cards = snap.docs
         .map(d => toFBCard(d.id, d.data() as Record<string, any>))

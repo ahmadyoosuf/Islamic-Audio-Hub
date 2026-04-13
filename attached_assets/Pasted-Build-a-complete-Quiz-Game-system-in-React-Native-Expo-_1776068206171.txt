@@ -1,0 +1,169 @@
+Build a complete Quiz Game system in React Native (Expo) with Text-to-Speech (TTS) and multi-level gameplay.
+
+FEATURE OVERVIEW:
+- Each card contains 30 quiz questions
+- Questions are split into 3 levels:
+  Level 1 → 5 questions
+  Level 2 → 10 questions
+  Level 3 → 15 questions
+
+-----------------------------------
+
+1. SCREEN FLOW:
+
+Card Screen → Quiz Button →
+Level Selection Screen →
+Question Screen →
+Answer Feedback →
+Next Question →
+Result Screen →
+Next Level
+
+-----------------------------------
+
+2. LEVEL SELECTION UI:
+
+- Show 3 levels as cards:
+  Level 1 (Unlocked)
+  Level 2 (Locked until Level 1 complete)
+  Level 3 (Locked until Level 2 complete)
+
+- Each level should have:
+  - Title
+  - Number of questions
+  - Lock icon if locked
+
+-----------------------------------
+
+3. QUESTION SCREEN (GAME UI):
+
+- Show:
+  - Level title
+  - Question number (e.g., 2/5)
+  - Progress bar
+  - Question text
+  - 4 options (buttons)
+
+- UI Style:
+  - Card design
+  - Rounded corners
+  - Shadow
+  - Clean spacing
+
+-----------------------------------
+
+4. TEXT-TO-SPEECH (TTS):
+
+Use expo-speech.
+
+- Auto play question when screen loads
+- After question finishes → read options one by one
+
+Example flow:
+1. Speak question
+2. Speak:
+   "Option A ..."
+   "Option B ..."
+   "Option C ..."
+   "Option D ..."
+
+- Add "🔊 Listen Again" button
+
+-----------------------------------
+
+5. ANSWER INTERACTION:
+
+- When user selects:
+  - Correct → show green highlight + "Correct"
+  - Wrong → red highlight + show correct answer
+
+- After 1 second → move to next question
+
+-----------------------------------
+
+6. RESULT SCREEN:
+
+- Show:
+  - Score (e.g., 4/5)
+  - Correct count
+  - Wrong count
+
+- Buttons:
+  - Next Level (if available)
+  - Replay Level
+
+-----------------------------------
+
+7. LEVEL DESIGN (GAME FEEL):
+
+- Level 1 → Green theme
+- Level 2 → Yellow/Orange theme
+- Level 3 → Red theme
+
+- Add:
+  - Smooth transitions
+  - Button animations
+  - Progress bar animation
+
+-----------------------------------
+
+8. DATA LOGIC:
+
+- Each card has 30 questions
+- Split:
+  - First 5 → Level 1
+  - Next 10 → Level 2
+  - Last 15 → Level 3
+
+- Do NOT repeat questions across levels
+
+-----------------------------------
+
+9. STATE MANAGEMENT:
+
+- Save progress per card
+- Unlock levels based on completion
+- Use AsyncStorage for saving progress
+
+-----------------------------------
+
+10. AUDIO SETTINGS:
+
+- Add toggle:
+  "Voice Mode ON / OFF"
+
+- If OFF:
+  - Do not play audio
+
+-----------------------------------
+
+11. EXTRA FEATURES:
+
+- Add sound effects:
+  - Correct → positive sound
+  - Wrong → negative sound
+
+- Add delay between question transitions
+
+-----------------------------------
+
+12. CLEAN CODE:
+
+- Use reusable components:
+  - LevelCard
+  - QuestionCard
+  - OptionButton
+  - ResultScreen
+
+- Keep code modular and scalable
+
+-----------------------------------
+
+OUTPUT:
+
+- Provide full working React Native (Expo) code
+- Include:
+  - UI components
+  - TTS integration
+  - Navigation
+  - State logic

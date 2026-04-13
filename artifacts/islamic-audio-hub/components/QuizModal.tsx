@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as Speech from "expo-speech";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -11,6 +12,7 @@ import {
   Text,
   View,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "@/context/AppContext";
 import {
@@ -24,6 +26,8 @@ import {
   type LevelResult,
   type TrackQuizProgress,
 } from "@/data/quizProgress";
+
+const VOICE_MODE_KEY = "quiz_voice_mode_v1";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -40,9 +44,9 @@ interface LevelCfg {
 }
 
 const LEVEL_CFG: LevelCfg[] = [
-  { id: 1, label: "Level 1", labelTa: "ஆரம்ப நிலை",  icon: "leaf-outline",   color: "#4ade80", qStart: 0,  qEnd: 5  },
-  { id: 2, label: "Level 2", labelTa: "இடை நிலை",    icon: "flash-outline",  color: "#60a5fa", qStart: 5,  qEnd: 15 },
-  { id: 3, label: "Level 3", labelTa: "உயர் நிலை",   icon: "trophy-outline", color: "#f0bc42", qStart: 15, qEnd: 30 },
+  { id: 1, label: "Level 1", labelTa: "ஆரம்ப நிலை",  icon: "leaf-outline",   color: "#22c55e", qStart: 0,  qEnd: 5  },
+  { id: 2, label: "Level 2", labelTa: "இடை நிலை",    icon: "flash-outline",  color: "#f59e0b", qStart: 5,  qEnd: 15 },
+  { id: 3, label: "Level 3", labelTa: "உயர் நிலை",   icon: "trophy-outline", color: "#ef4444", qStart: 15, qEnd: 30 },
 ];
 
 const OPTION_LABELS = ["A", "B", "C", "D"];
@@ -165,6 +169,63 @@ export default function QuizModal({
   // Ref mirrors score to avoid stale-closure bug when finishLevel is called from a timeout
   const scoreRef = useRef(0);
 
+  // ── Voice / TTS ───────────────────────────────────────────────────────────
+  const [voiceMode,  setVoiceMode]  = useState(true);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const voiceModeRef = useRef(true);
+
+  useEffect(() => { voiceModeRef.current = voiceMode; }, [voiceMode]);
+
+  // Load voice mode from storage on mount
+  useEffect(() => {
+    AsyncStorage.getItem(VOICE_MODE_KEY).then((val) => {
+      const on = val !== "off";
+      setVoiceMode(on);
+      voiceModeRef.current = on;
+    });
+  }, []);
+
+  function stopSpeech() {
+    try { Speech.stop(); } catch {}
+    setIsSpeaking(false);
+  }
+
+  async function toggleVoiceMode() {
+    const next = !voiceModeRef.current;
+    voiceModeRef.current = next;
+    setVoiceMode(next);
+    await AsyncStorage.setItem(VOICE_MODE_KEY, next ? "on" : "off");
+    if (!next) stopSpeech();
+  }
+
+  function speakOptionsChain(quiz: UnifiedQuiz, idx: number) {
+    if (!voiceModeRef.current || idx >= quiz.options.length) {
+      setIsSpeaking(false);
+      return;
+    }
+    const label = OPTION_LABELS[idx] ?? String(idx + 1);
+    try {
+      Speech.speak(`${label}. ${quiz.options[idx]}`, {
+        language: "ta-IN",
+        onDone:  () => speakOptionsChain(quiz, idx + 1),
+        onError: () => setIsSpeaking(false),
+      });
+    } catch { setIsSpeaking(false); }
+  }
+
+  function speakQuestion(quiz: UnifiedQuiz) {
+    if (!voiceModeRef.current) return;
+    stopSpeech();
+    setIsSpeaking(true);
+    try {
+      Speech.speak(quiz.question, {
+        language: "ta-IN",
+        onDone:  () => speakOptionsChain(quiz, 0),
+        onError: () => setIsSpeaking(false),
+      });
+    } catch { setIsSpeaking(false); }
+  }
+
   // ── Animations ───────────────────────────────────────────────────────────
   const fadeQ     = useRef(new Animated.Value(0)).current;
   const slideQ    = useRef(new Animated.Value(28)).current;
@@ -187,6 +248,7 @@ export default function QuizModal({
     setPhase("select");
     setScore(0);
     setStreak(0);
+    stopSpeech();
     Promise.all([getQuizzesByTrack(trackId), getQuizProgress(trackId)]).then(
       ([qs, prog]) => {
         setQuestions(qs);
@@ -195,9 +257,29 @@ export default function QuizModal({
     );
   }, [visible, trackId]);
 
+  // Stop speech when leaving playing phase
+  useEffect(() => {
+    if (phase !== "playing") stopSpeech();
+  }, [phase]);
+
+  // Cleanup on unmount
+  useEffect(() => { return () => stopSpeech(); }, []);
+
   useEffect(() => {
     if (phase === "playing") animateIn();
   }, [phase, qIdx, animateIn]);
+
+  // Auto-speak question when it becomes active (with short delay for animation)
+  useEffect(() => {
+    if (phase !== "playing" || levelQs.length === 0) return;
+    const q = levelQs[qIdx];
+    if (!q) return;
+    const timer = setTimeout(() => {
+      if (voiceModeRef.current) speakQuestion(q);
+    }, 350);
+    return () => { clearTimeout(timer); stopSpeech(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qIdx, phase]);
 
   // ── Level helpers ────────────────────────────────────────────────────────
   const levelQCount = (cfg: LevelCfg) =>
@@ -231,6 +313,7 @@ export default function QuizModal({
 
   function handleSelect(optIdx: number) {
     if (answered) return;
+    stopSpeech();
     setSelected(optIdx);
     setAnswered(true);
     const correct = levelQs[qIdx].correctIndex === optIdx;
@@ -284,6 +367,7 @@ export default function QuizModal({
   }
 
   function handleClose() {
+    stopSpeech();
     setPhase("select");
     onClose();
   }
@@ -324,7 +408,17 @@ export default function QuizModal({
                   {trackTitle}
                 </Text>
               </View>
-              <View style={{ width: 40 }} />
+              <Pressable
+                onPress={toggleVoiceMode}
+                style={[s.iconBtn, { backgroundColor: voiceMode ? "#1a7a4a22" : "transparent" }]}
+                hitSlop={12}
+              >
+                <Ionicons
+                  name={voiceMode ? "volume-high-outline" : "volume-mute-outline"}
+                  size={22}
+                  color={voiceMode ? "#1a7a4a" : sub}
+                />
+              </Pressable>
             </View>
 
             {/* Question count pill */}
@@ -430,14 +524,24 @@ export default function QuizModal({
                     {activeCfg.label}
                   </Text>
                 </View>
+                {streak >= 3 && (
+                  <View style={[s.streakPill, { marginTop: 4 }]}>
+                    <Text style={s.streakTxt}>🔥 {streak}</Text>
+                  </View>
+                )}
               </View>
-              {streak >= 3 ? (
-                <View style={s.streakPill}>
-                  <Text style={s.streakTxt}>🔥 {streak}</Text>
-                </View>
-              ) : (
-                <View style={{ width: 52 }} />
-              )}
+              {/* Voice toggle */}
+              <Pressable
+                onPress={toggleVoiceMode}
+                style={[s.iconBtn, { backgroundColor: voiceMode ? activeCfg.color + "22" : "transparent" }]}
+                hitSlop={12}
+              >
+                <Ionicons
+                  name={voiceMode ? "volume-high-outline" : "volume-mute-outline"}
+                  size={20}
+                  color={voiceMode ? activeCfg.color : sub}
+                />
+              </Pressable>
             </View>
 
             {/* Progress bar */}
@@ -456,7 +560,26 @@ export default function QuizModal({
               <Text style={[s.progressTxt, { color: sub }]}>
                 கேள்வி {qIdx + 1} / {levelQs.length}
               </Text>
-              <Text style={[s.progressTxt, { color: "#4ade80" }]}>✅ {score}</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Text style={[s.progressTxt, { color: "#22c55e" }]}>✅ {score}</Text>
+                {/* Listen Again button */}
+                {voiceMode && (
+                  <Pressable
+                    onPress={() => q && speakQuestion(q)}
+                    style={[s.listenBtn, { borderColor: activeCfg.color + "66", backgroundColor: activeCfg.color + "18" }]}
+                    hitSlop={8}
+                  >
+                    <Ionicons
+                      name={isSpeaking ? "pause-circle-outline" : "volume-medium-outline"}
+                      size={14}
+                      color={activeCfg.color}
+                    />
+                    <Text style={[s.listenBtnTxt, { color: activeCfg.color }]}>
+                      {isSpeaking ? "படிக்கிறது..." : "மீண்டும் கேள்"}
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
 
             <ScrollView
@@ -715,6 +838,9 @@ const s = StyleSheet.create({
 
   streakPill:     { backgroundColor: "#ff6b3533", borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
   streakTxt:      { fontSize: 13, fontWeight: "700" },
+
+  listenBtn:      { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, borderWidth: 1 },
+  listenBtnTxt:   { fontSize: 11, fontWeight: "600" },
 
   progressTrack:  { height: 4 },
   progressFill:   { height: 4, borderRadius: 2 },

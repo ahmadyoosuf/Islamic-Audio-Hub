@@ -302,8 +302,8 @@ function CardManager() {
   const [cards,     setCards]     = useState<FBCard[]>([]);
   const [loading,   setLoading]   = useState(true);
   const [saving,    setSaving]    = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadPct, setUploadPct] = useState(0);
+  const [uploading,    setUploading]    = useState(false);
+  const [uploadPhase,  setUploadPhase]  = useState<"reading" | "uploading">("reading");
   const [form, setForm] = useState({
     categoryId: "", subcategoryId: "",
     titleTa: "", titleEn: "", audioUrl: "", description: "",
@@ -325,16 +325,24 @@ function CardManager() {
       const result = await DocumentPicker.getDocumentAsync({ type: "audio/*", copyToCacheDirectory: true });
       if (result.canceled || !result.assets?.[0]) return;
       const asset = result.assets[0];
+
       setUploading(true);
-      setUploadPct(0);
+      setUploadPhase("reading");
+
       const filename = `${Date.now()}_${asset.name ?? "audio.mp3"}`;
-      const url = await uploadAudio(asset.uri, filename, (p: UploadProgress) => setUploadPct(p.percent));
+
+      const url = await uploadAudio(asset.uri, filename, (p: UploadProgress) => {
+        // 0% = blob read phase; 100% = upload complete
+        if (p.percent > 0) setUploadPhase("uploading");
+      });
+
       setForm(f => ({ ...f, audioUrl: url }));
       Alert.alert("✅ பதிவேற்றம் வெற்றி", "ஒலி கோப்பு Firebase Storage-ல் சேமிக்கப்பட்டது");
     } catch (e: any) {
       Alert.alert("பிழை", e.message ?? "பதிவேற்றம் தோல்வி");
     } finally {
       setUploading(false);
+      setUploadPhase("reading");
     }
   }
 
@@ -452,7 +460,9 @@ function CardManager() {
         ) : uploading ? (
           <View style={s.audioRow}>
             <ActivityIndicator size="small" color={C.green} />
-            <Text style={s.audioTxt}>{uploadPct}% பதிவேற்றுகிறது...</Text>
+            <Text style={s.audioTxt}>
+              {uploadPhase === "reading" ? "📂 கோப்பு படிக்கிறது..." : "☁️ Firebase-ல் பதிவேற்றுகிறது..."}
+            </Text>
           </View>
         ) : (
           <TouchableOpacity style={[s.btn, { backgroundColor: C.gold, marginBottom: 8 }]} onPress={pickAndUploadAudio}>

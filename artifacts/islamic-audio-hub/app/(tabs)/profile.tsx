@@ -9,7 +9,7 @@ import {
   Text,
   TouchableOpacity,
   View,
-  useColorScheme,
+
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -20,11 +20,10 @@ import { useColors } from "@/hooks/useColors";
 
 export default function ProfileScreen() {
   const colors = useColors();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { favorites, recentTracks, isDarkMode, toggleDarkMode, playbackProgress } = useApp();
+  const isDark = isDarkMode;
 
   const totalListened = Object.values(playbackProgress).reduce(
     (sum, p) => sum + p.progressSeconds,

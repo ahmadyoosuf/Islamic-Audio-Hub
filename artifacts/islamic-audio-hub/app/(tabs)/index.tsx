@@ -10,12 +10,12 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  useColorScheme,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import AudioPlayer from "@/components/AudioPlayer";
 import { useAudio } from "@/context/AudioContext";
+import { useApp } from "@/context/AppContext";
 import {
   getAllTracks,
   getAllCategories,
@@ -181,8 +181,7 @@ function BismillahBanner({ isDark }: { isDark: boolean }) {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDarkMode: isDark } = useApp();
 
   const [allTracks, setAllTracks] = useState<UnifiedTrack[]>([]);
   const [categories, setCategories] = useState<StoredCategory[]>([]);

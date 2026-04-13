@@ -28,6 +28,7 @@ export default function AdminCategoryScreen() {
   const [subModalVisible, setSubModalVisible] = useState(false);
   const [editingSub, setEditingSub] = useState<StoredSubcategory | null>(null);
   const [subNameInput, setSubNameInput] = useState('');
+  const [subNameEnInput, setSubNameEnInput] = useState('');
   const [subSaving, setSubSaving] = useState(false);
 
   useFocusEffect(
@@ -66,12 +67,14 @@ export default function AdminCategoryScreen() {
   function openAddSub() {
     setEditingSub(null);
     setSubNameInput('');
+    setSubNameEnInput('');
     setSubModalVisible(true);
   }
 
   function openEditSub(sub: StoredSubcategory) {
     setEditingSub(sub);
     setSubNameInput(sub.name);
+    setSubNameEnInput(sub.nameEn ?? '');
     setSubModalVisible(true);
   }
 
@@ -79,13 +82,17 @@ export default function AdminCategoryScreen() {
     if (!subNameInput.trim()) return;
     setSubSaving(true);
     try {
+      const payload = {
+        name: subNameInput.trim(),
+        nameEn: subNameEnInput.trim() || undefined,
+      };
       if (editingSub) {
-        await updateSubcategory(editingSub.id, { name: subNameInput.trim() });
+        await updateSubcategory(editingSub.id, payload);
       } else {
         await addSubcategory({
           categoryId: id ?? '',
-          name: subNameInput.trim(),
           sortOrder: subcategories.length + 1,
+          ...payload,
         });
       }
       const fresh = await getSubcategoriesByCategory(id ?? '');
@@ -270,13 +277,22 @@ export default function AdminCategoryScreen() {
             <Text style={styles.modalTitle}>
               {editingSub ? '✏️ Subcategory திருத்து' : '➕ Subcategory சேர்'}
             </Text>
+            <Text style={styles.modalLabel}>English Title (Main)</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="e.g. Surah Al-Fatiha"
+              placeholderTextColor="#555"
+              value={subNameEnInput}
+              onChangeText={setSubNameEnInput}
+              autoFocus
+            />
+            <Text style={styles.modalLabel}>தமிழ் தலைப்பு (Subtitle)</Text>
             <TextInput
               style={styles.modalInput}
               placeholder="Subcategory பெயர்"
               placeholderTextColor="#555"
               value={subNameInput}
               onChangeText={setSubNameInput}
-              autoFocus
             />
             <View style={styles.modalBtns}>
               <TouchableOpacity style={styles.modalCancel} onPress={() => setSubModalVisible(false)}>
@@ -371,6 +387,7 @@ const styles = StyleSheet.create({
     width: '85%', borderWidth: 1, borderColor: '#333',
   },
   modalTitle: { color: '#fff', fontSize: 17, fontWeight: '700', marginBottom: 16 },
+  modalLabel: { color: '#888', fontSize: 11, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
   modalInput: {
     backgroundColor: '#111', borderWidth: 1, borderColor: '#333',
     borderRadius: 8, padding: 12, fontSize: 15, color: '#fff', marginBottom: 16,

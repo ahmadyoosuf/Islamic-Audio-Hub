@@ -62,7 +62,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [playbackProgress, setPlaybackProgress] = useState<
     Record<string, PlaybackProgress>
   >({});
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [recentTracks, setRecentTracks] = useState<Track[]>([]);
 
   useEffect(() => {

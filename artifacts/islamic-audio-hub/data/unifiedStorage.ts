@@ -22,6 +22,7 @@ export interface StoredSubcategory {
   id: string;
   categoryId: string;
   name: string;
+  nameEn?: string;
   sortOrder: number;
   createdAt: number;
 }

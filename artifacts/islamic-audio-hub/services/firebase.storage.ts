@@ -13,53 +13,15 @@ export interface UploadProgress {
   percent:          number;
 }
 
-// ─── URI → Blob via XHR (native only) ────────────────────────────────────────
-// On React Native, fetch() silently returns an empty blob for local file:// and
-// content:// URIs. XMLHttpRequest with responseType="blob" is the only reliable
-// method to read a local device file into memory.
-
-function uriBlobXHR(uri: string): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 400) {
-        resolve(xhr.response as Blob);
-      } else {
-        reject(new Error(`XHR status ${xhr.status} for ${uri}`));
-      }
-    };
-    xhr.onerror = () => reject(new Error(`XHR network error reading: ${uri}`));
-    xhr.responseType = "blob";
-    xhr.open("GET", uri, true);
-    xhr.send(null);
-  });
-}
-
-// ─── MIME type from filename ──────────────────────────────────────────────────
-
-function mimeFromFilename(name: string): string {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  const map: Record<string, string> = {
-    mp3:  "audio/mpeg",
-    m4a:  "audio/mp4",
-    aac:  "audio/aac",
-    ogg:  "audio/ogg",
-    wav:  "audio/wav",
-    flac: "audio/flac",
-    webm: "audio/webm",
-  };
-  return map[ext] ?? "audio/mpeg";
-}
-
 // ─── Pick audio file on web ───────────────────────────────────────────────────
-// On web, expo-document-picker returns an object URL that isn't always readable.
+// On web, expo-document-picker returns an object URL that XHR cannot read.
 // A hidden <input type="file"> gives us the actual File object (already a Blob).
 
 export function pickAudioFileWeb(): Promise<File | null> {
   return new Promise(resolve => {
     const input = document.createElement("input");
-    input.type    = "file";
-    input.accept  = "audio/*";
+    input.type   = "file";
+    input.accept = "audio/*";
     input.style.display = "none";
 
     input.onchange = (e: Event) => {
@@ -68,7 +30,6 @@ export function pickAudioFileWeb(): Promise<File | null> {
       resolve(file);
     };
 
-    // If user closes dialog without picking
     input.addEventListener("cancel", () => {
       document.body.removeChild(input);
       resolve(null);
@@ -80,69 +41,74 @@ export function pickAudioFileWeb(): Promise<File | null> {
 }
 
 // ─── uploadAudio ──────────────────────────────────────────────────────────────
-// Accepts either:
-//   • source: string  — a local file URI from expo-document-picker (native)
-//   • source: Blob    — a File object from <input type="file"> (web)
+// source: string  → local file URI from expo-document-picker (native/mobile)
+// source: Blob    → File object from <input type="file"> (web)
 //
-// Uses uploadBytes (single PUT request) instead of uploadBytesResumable.
-// uploadBytesResumable's resumable protocol commonly fails in React Native
-// with "unknown" errors due to CORS on the resumable upload endpoint.
+// Storage path: songs/<filename>
+//
+// NOTE: Firebase Storage security rules must allow writes, e.g.:
+//   match /{allPaths=**} { allow read, write: if true; }
 
 export async function uploadAudio(
   source:      string | Blob,
-  filename:    string,
+  fileName:    string,
   onProgress?: (p: UploadProgress) => void,
 ): Promise<string> {
+  try {
+    const storageRef: StorageReference = ref(storage, "songs/" + fileName);
 
-  // ── Step 1: get a Blob ───────────────────────────────────────────────────
-  let blob: Blob;
+    // ── Get blob ─────────────────────────────────────────────────────────────
+    let blob: Blob | undefined;
 
-  if (typeof source === "string") {
-    // Native: local URI → blob via XHR
-    try {
-      blob = await uriBlobXHR(source);
-    } catch (e: any) {
-      console.error("[Storage] uriBlobXHR failed:", e?.message ?? e);
-      throw new Error(`கோப்பு படிக்க முடியவில்லை: ${e?.message ?? "XHR error"}`);
+    if (typeof source === "string") {
+      // 👉 Mobile case (URI → Blob via XHR)
+      // fetch() silently returns empty blob on local file:// URIs in React Native.
+      // XMLHttpRequest with responseType="blob" is the only reliable method.
+      blob = await new Promise<Blob>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 400) resolve(xhr.response as Blob);
+          else reject(new Error(`XHR status ${xhr.status}`));
+        };
+        xhr.onerror = () => reject(new Error("XHR network error"));
+        xhr.responseType = "blob";
+        xhr.open("GET", source as string, true);
+        xhr.send(null);
+      });
+    } else {
+      // 👉 Web case — File IS already a Blob, use directly
+      blob = source;
     }
-  } else {
-    // Web: File/Blob already in memory — no conversion needed
-    blob = source;
-  }
 
-  if (!blob || blob.size === 0) {
-    throw new Error("கோப்பு காலியாக உள்ளது (0 bytes) — வேறு கோப்பை தேர்ந்தெடுக்கவும்");
-  }
+    // ── DEBUG LOGS ────────────────────────────────────────────────────────────
+    console.log("FILE:", fileName);
+    console.log("BLOB:", blob);
+    console.log("SIZE:", blob?.size);
 
-  console.log(`[Storage] blob ready — size: ${blob.size} bytes, name: ${filename}`);
-  onProgress?.({ bytesTransferred: 0, totalBytes: blob.size, percent: 0 });
+    if (!blob || blob.size === 0) {
+      throw new Error("❌ Blob is empty or undefined");
+    }
 
-  // ── Step 2: upload ───────────────────────────────────────────────────────
-  const mime = (blob as File).type || mimeFromFilename(filename);
-  const storageRef: StorageReference = ref(storage, `audio/${filename}`);
+    onProgress?.({ bytesTransferred: 0, totalBytes: blob.size, percent: 0 });
 
-  let snapshot;
-  try {
-    snapshot = await uploadBytes(storageRef, blob, { contentType: mime });
+    // ── Upload ────────────────────────────────────────────────────────────────
+    const snapshot = await uploadBytes(storageRef, blob);
+    console.log("✅ Upload success:", snapshot);
+
+    onProgress?.({ bytesTransferred: blob.size, totalBytes: blob.size, percent: 100 });
+
+    // ── Get download URL ──────────────────────────────────────────────────────
+    const url = await getDownloadURL(snapshot.ref);
+    console.log("✅ Download URL:", url.substring(0, 80) + "...");
+    return url;
+
   } catch (e: any) {
-    console.error("[Storage] uploadBytes failed:", e?.code, e?.message, e?.serverResponse);
-    throw new Error(`Firebase Storage upload பிழை: ${e?.message ?? e?.code ?? "unknown"}`);
+    console.error("🔥 FULL ERROR:", e);
+    console.error("   code:", e?.code);
+    console.error("   message:", e?.message);
+    console.error("   serverResponse:", e?.serverResponse);
+    throw e;
   }
-
-  onProgress?.({ bytesTransferred: blob.size, totalBytes: blob.size, percent: 100 });
-  console.log(`[Storage] upload complete — path: ${snapshot.ref.fullPath}`);
-
-  // ── Step 3: get download URL ─────────────────────────────────────────────
-  let url: string;
-  try {
-    url = await getDownloadURL(snapshot.ref);
-  } catch (e: any) {
-    console.error("[Storage] getDownloadURL failed:", e?.code, e?.message);
-    throw new Error(`Download URL பெற முடியவில்லை: ${e?.message ?? e?.code}`);
-  }
-
-  console.log(`[Storage] download URL obtained ✓`);
-  return url;
 }
 
 // ─── deleteAudio ──────────────────────────────────────────────────────────────
@@ -152,7 +118,7 @@ export async function deleteAudio(downloadUrl: string): Promise<void> {
     const fileRef = ref(storage, downloadUrl);
     await deleteObject(fileRef);
   } catch (e: any) {
-    console.error("[Storage] deleteAudio failed:", e?.code, e?.message);
+    console.error("🔥 deleteAudio error:", e);
     throw e;
   }
 }

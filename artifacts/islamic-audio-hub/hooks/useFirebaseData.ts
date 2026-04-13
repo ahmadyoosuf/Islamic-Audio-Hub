@@ -1,9 +1,12 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import {
   subscribeCategories,
   subscribeSubcategories,
   subscribeCards,
   subscribeAllCards,
+  subscribeCategory,
+  subscribeSubcategory,
+  subscribeCardsByCategory,
   type FBCategory,
   type FBSubcategory,
   type FBCard,
@@ -81,6 +84,66 @@ export function useAllCards() {
     );
     return unsub;
   }, []);
+
+  return { cards, loading, error };
+}
+
+// ─── useCategory (single doc) ─────────────────────────────────────────────────
+export function useCategory(id: string) {
+  const [category, setCategory] = useState<FBCategory | null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) { setLoading(false); return; }
+    setLoading(true);
+    const unsub = subscribeCategory(
+      id,
+      cat => { setCategory(cat); setLoading(false); setError(null); },
+      err => { setError(err.message); setLoading(false); }
+    );
+    return unsub;
+  }, [id]);
+
+  return { category, loading, error };
+}
+
+// ─── useSubcategory (single doc) ──────────────────────────────────────────────
+export function useSubcategory(id: string) {
+  const [subcategory, setSubcategory] = useState<FBSubcategory | null>(null);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id || id === "unassigned") { setLoading(false); return; }
+    setLoading(true);
+    const unsub = subscribeSubcategory(
+      id,
+      sub => { setSubcategory(sub); setLoading(false); setError(null); },
+      err => { setError(err.message); setLoading(false); }
+    );
+    return unsub;
+  }, [id]);
+
+  return { subcategory, loading, error };
+}
+
+// ─── useCardsByCategory ───────────────────────────────────────────────────────
+export function useCardsByCategory(categoryId: string) {
+  const [cards,   setCards]   = useState<FBCard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!categoryId) { setLoading(false); return; }
+    setLoading(true);
+    const unsub = subscribeCardsByCategory(
+      categoryId,
+      cards => { setCards(cards); setLoading(false); setError(null); },
+      err   => { setError(err.message); setLoading(false); }
+    );
+    return unsub;
+  }, [categoryId]);
 
   return { cards, loading, error };
 }

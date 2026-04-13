@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Animated,
   Dimensions,
@@ -13,83 +13,73 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AudioPlayer from "@/components/AudioPlayer";
-import GameLevelCard from "@/components/GameLevelCard";
 import { useApp } from "@/context/AppContext";
+import { getCategoryById, type StoredCategory } from "@/data/unifiedStorage";
 import {
-  getCategoryById,
-  getSubcategoriesByCategory,
-  getTracksByCategory,
-  type StoredCategory,
-  type StoredSubcategory,
-  type UnifiedTrack,
-} from "@/data/unifiedStorage";
-import { useSubcategories, useCards } from "@/hooks/useFirebaseData";
-import type { FBSubcategory, FBCard } from "@/services/firebase.firestore";
-import type { Track } from "@/context/AppContext";
+  useCategory,
+  useSubcategories,
+  useCardsByCategory,
+} from "@/hooks/useFirebaseData";
+import type { FBCategory, FBSubcategory, FBCard } from "@/services/firebase.firestore";
 
-// ─── Adapters ─────────────────────────────────────────────────────────────────
-function fbSubToStored(s: FBSubcategory): StoredSubcategory {
-  return { id: s.id, categoryId: s.categoryId, name: s.name, nameEn: s.nameEn, sortOrder: s.sortOrder, createdAt: s.createdAt };
-}
-function fbCardToUnified(c: FBCard, categoryName: string): UnifiedTrack {
-  return {
-    id: c.id, title: c.titleTa || c.titleEn, categoryId: c.categoryId, categoryName,
-    subcategoryId: c.subcategoryId, duration: c.duration, audioUrl: c.audioUrl,
-    viewCount: c.viewCount, isPremium: c.isPremium, sortOrder: c.sortOrder,
-    hasQuiz: c.hasQuiz, isBuiltIn: false, description: c.description,
-    fileName: undefined, uploadedAt: c.createdAt,
-  };
-}
+// ─── Layout ───────────────────────────────────────────────────────────────────
 
 const { width: SCREEN_W } = Dimensions.get("window");
-const CARD_GAP  = 12;
-const CARD_W    = (Math.min(SCREEN_W, 480) - 32 - CARD_GAP) / 2;
+const CARD_GAP = 12;
+const CARD_W   = (Math.min(SCREEN_W, 480) - 32 - CARD_GAP) / 2;
 
-// Icon map — English key words → Ionicons name
+// ─── Palette ──────────────────────────────────────────────────────────────────
+
+const C = {
+  green:    "#1a7a4a",
+  border:   "#d4ead9",
+  bg:       "#f4faf6",
+  bgDark:   "#0a0e0c",
+  cardBg:   "#ffffff",
+  cardDark: "#111816",
+  txt:      "#0d2414",
+  txtDark:  "#e0f0e8",
+  sub:      "#5a7a5a",
+  subDark:  "#5a9a6a",
+  bdr:      "#1e2e24",
+};
+
+// Icon map for subcategory icons
 const ICON_MAP: Record<string, string> = {
-  quran: "book",       surah: "book",        fatiha: "book",
-  bakara: "book",      tafseer: "search",    tafsir: "search",
-  explanation: "search",
+  quran: "book", surah: "book", fatiha: "book",
+  tafseer: "search", tafsir: "search", explanation: "search",
   hadith: "document-text", hadis: "document-text",
-  lesson: "school",    learn: "school",      education: "school",
-  iman: "star",        faith: "star",        belief: "star",
-  seerah: "person",    prophet: "person",    nabi: "person",
-  daily: "sunny",      dua: "hand-left",     prayer: "hand-left",
-  salah: "time",       seerath: "person",    history: "time",
+  lesson: "school", learn: "school", iman: "star",
+  faith: "star", seerah: "person", nabi: "person",
+  daily: "sunny", dua: "hand-left", prayer: "hand-left",
   default: "musical-notes",
 };
 
-function resolveIcon(sub: StoredSubcategory): string {
-  const haystack = ((sub.nameEn ?? "") + " " + sub.name).toLowerCase();
+function resolveIcon(nameEn: string, name: string): string {
+  const hay = (nameEn + " " + name).toLowerCase();
   for (const [key, icon] of Object.entries(ICON_MAP)) {
-    if (key !== "default" && haystack.includes(key)) return icon;
+    if (key !== "default" && hay.includes(key)) return icon;
   }
   return ICON_MAP.default;
 }
 
-function unifiedToTrack(u: UnifiedTrack): Track {
-  return {
-    id: u.id, title: u.title, categoryId: u.categoryId, categoryName: u.categoryName,
-    duration: u.duration, audioUrl: u.audioUrl, viewCount: u.viewCount,
-    isPremium: u.isPremium, sortOrder: u.sortOrder, prizeEnabled: u.prizeEnabled,
-    hasQuiz: u.hasQuiz, isBuiltIn: u.isBuiltIn, description: u.description,
-    fileName: u.fileName, uploadedAt: u.uploadedAt,
-  };
-}
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
 
-// ─── Skeleton card ────────────────────────────────────────────────────────────
 function SkeletonCard({ isDark, color }: { isDark: boolean; color: string }) {
   const pulse = useRef(new Animated.Value(0.4)).current;
-  React.useEffect(() => {
+  useEffect(() => {
     const loop = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 1,   duration: 700, useNativeDriver: true }),
       Animated.timing(pulse, { toValue: 0.4, duration: 700, useNativeDriver: true }),
     ]));
     loop.start();
     return () => loop.stop();
   }, []);
   return (
-    <Animated.View style={[styles.subCard, { width: CARD_W, backgroundColor: isDark ? "#111816" : "#fff", opacity: pulse }]}>
+    <Animated.View style={[
+      styles.subCard,
+      { width: CARD_W, backgroundColor: isDark ? C.cardDark : C.cardBg, opacity: pulse },
+    ]}>
       <View style={[styles.skelIcon, { backgroundColor: color + "22" }]} />
       <View style={[styles.skelLine1, { backgroundColor: isDark ? "#1e2e24" : "#e8f0ea" }]} />
       <View style={[styles.skelLine2, { backgroundColor: isDark ? "#1a2820" : "#f0f6f1" }]} />
@@ -97,44 +87,37 @@ function SkeletonCard({ isDark, color }: { isDark: boolean; color: string }) {
   );
 }
 
-// ─── Bilingual Subcategory Card ───────────────────────────────────────────────
-function SubCard({
-  sub, color, trackCount, isDark, entryAnim, onPress,
-}: {
-  sub: StoredSubcategory; color: string; trackCount: number;
-  isDark: boolean; entryAnim: Animated.Value; onPress: () => void;
-}) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const bgCard   = isDark ? "#111816" : "#ffffff";
-  const textMain = isDark ? "#e0f0e8" : "#0d2414";
-  const textSub  = isDark ? "#5a9a6a" : "#5a7a5a";
-  const iconBg   = isDark ? color + "28" : color + "18";
-  const iconName = resolveIcon(sub);
+// ─── Subcategory Card ─────────────────────────────────────────────────────────
 
-  const hasEn = !!(sub.nameEn && sub.nameEn.trim());
-  const mainTitle = hasEn ? sub.nameEn! : sub.name;
-  const subTitle  = hasEn ? sub.name : null;
+function SubCard({
+  sub, color, cardCount, isDark, anim, onPress,
+}: {
+  sub: FBSubcategory; color: string; cardCount: number;
+  isDark: boolean; anim: Animated.Value; onPress: () => void;
+}) {
+  const scale    = useRef(new Animated.Value(1)).current;
+  const bgCard   = isDark ? C.cardDark : C.cardBg;
+  const textMain = isDark ? C.txtDark : C.txt;
+  const textSub  = isDark ? C.subDark : C.sub;
+  const iconBg   = isDark ? color + "28" : color + "18";
+  const iconName = resolveIcon(sub.nameEn, sub.name);
 
   return (
     <Animated.View style={{
       width: CARD_W,
-      opacity: entryAnim,
-      transform: [{ scale: entryAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
+      opacity: anim,
+      transform: [{ scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }],
     }}>
       <Pressable
         onPress={onPress}
         onPressIn={() => Animated.spring(scale, { toValue: 0.95, useNativeDriver: true, speed: 40 }).start()}
-        onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 22 }).start()}
+        onPressOut={() => Animated.spring(scale, { toValue: 1,    useNativeDriver: true, speed: 22 }).start()}
       >
         <Animated.View style={[
           styles.subCard,
-          {
-            width: CARD_W, backgroundColor: bgCard,
-            borderColor: isDark ? "#1a2e20" : "#d4ead9",
-            transform: [{ scale }],
-          },
+          { width: CARD_W, backgroundColor: bgCard, borderColor: isDark ? C.bdr : C.border, transform: [{ scale }] },
         ]}>
-          {/* Accent strip */}
+          {/* Accent */}
           <View style={[styles.cardAccent, { backgroundColor: color }]} />
 
           {/* Icon */}
@@ -142,21 +125,23 @@ function SubCard({
             <Ionicons name={iconName as any} size={26} color={color} />
           </View>
 
-          {/* Titles */}
-          <Text style={[styles.cardMainTitle, { color: textMain }]} numberOfLines={2}>
-            {mainTitle}
+          {/* Tamil title (primary) */}
+          <Text style={[styles.cardTamil, { color: textMain }]} numberOfLines={2}>
+            {sub.name}
           </Text>
-          {subTitle && (
-            <Text style={[styles.cardSubTitle, { color: textSub }]} numberOfLines={2}>
-              {subTitle}
+
+          {/* English title (secondary) */}
+          {!!sub.nameEn && (
+            <Text style={[styles.cardEnglish, { color: textSub }]} numberOfLines={1}>
+              {sub.nameEn}
             </Text>
           )}
 
-          {/* Bottom row */}
+          {/* Footer */}
           <View style={styles.cardBottom}>
             <View style={[styles.countPill, { backgroundColor: color + "18" }]}>
               <Ionicons name="headset-outline" size={10} color={color} />
-              <Text style={[styles.countPillTxt, { color }]}>{trackCount}</Text>
+              <Text style={[styles.countTxt, { color }]}>{cardCount} பாடங்கள்</Text>
             </View>
             <View style={[styles.arrowCircle, { borderColor: color + "55" }]}>
               <Ionicons name="arrow-forward" size={12} color={color} />
@@ -168,128 +153,91 @@ function SubCard({
   );
 }
 
-// ─── "All" card ───────────────────────────────────────────────────────────────
-function AllCard({ color, count, isDark, onPress }: {
-  color: string; count: number; isDark: boolean; onPress: () => void;
-}) {
-  const scale = useRef(new Animated.Value(1)).current;
+// ─── Empty subcategories ──────────────────────────────────────────────────────
+
+function EmptySubcategories({ color, isDark }: { color: string; isDark: boolean }) {
+  const txt = isDark ? C.subDark : C.sub;
   return (
-    <Pressable
-      onPress={onPress}
-      onPressIn={() => Animated.spring(scale, { toValue: 0.95, useNativeDriver: true, speed: 40 }).start()}
-      onPressOut={() => Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 22 }).start()}
-    >
-      <Animated.View style={[
-        styles.allCard,
-        {
-          borderColor: color + "55",
-          backgroundColor: isDark ? color + "15" : color + "0a",
-          transform: [{ scale }],
-        },
-      ]}>
-        <View style={[styles.allIconBox, { backgroundColor: color + "22" }]}>
-          <Ionicons name="musical-notes" size={20} color={color} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.allCardMain, { color: isDark ? "#e0f0e8" : "#0d2414" }]}>
-            All Tracks
-          </Text>
-          <Text style={[styles.allCardSub, { color: isDark ? "#5a9a6a" : "#5a7a5a" }]}>
-            அனைத்து பாடங்கள் — {count}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={color} />
-      </Animated.View>
-    </Pressable>
+    <View style={styles.emptyBox}>
+      <View style={[styles.emptyIconBox, { backgroundColor: color + "18" }]}>
+        <Ionicons name="git-branch-outline" size={36} color={color} />
+      </View>
+      <Text style={[styles.emptyTitle, { color: isDark ? C.txtDark : C.txt }]}>
+        உப-பிரிவுகள் இல்லை
+      </Text>
+      <Text style={[styles.emptyHint, { color: txt }]}>
+        Admin → Firebase CMS → Subcategories tab-ல் உப-பிரிவுகள் சேர்க்கவும்
+      </Text>
+    </View>
   );
 }
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
+
 export default function CategoryScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const router  = useRouter();
-  const { isDarkMode } = useApp();
-  const isDark = isDarkMode;
+  const { id }   = useLocalSearchParams<{ id: string }>();
+  const router   = useRouter();
+  const { isDarkMode: isDark } = useApp();
 
-  const [category,     setCategory]  = useState<StoredCategory | null>(null);
-  const [seedSubs,     setSeedSubs]  = useState<StoredSubcategory[]>([]);
-  const [seedTracks,   setSeedTracks]= useState<UnifiedTrack[]>([]);
-  const [seedLoaded,   setSeedLoaded]= useState(false);
-  const [showAll,      setShowAll]   = useState(false);
-  const [visibleCount, setVisible]   = useState(15);
+  // ── 1. Fetch category (Firebase first, seeded fallback) ──────────────────
+  const { category: fbCat, loading: fbCatLoading } = useCategory(id ?? "");
+  const [seedCat, setSeedCat] = useState<StoredCategory | null>(null);
 
-  // Firebase real-time data
-  const { subcategories: fbSubs, loading: fbSubsLoading } = useSubcategories(id ?? "");
+  useEffect(() => {
+    getCategoryById(id ?? "").then(setSeedCat);
+  }, [id]);
 
-  // Derive merged data
-  const subcategories: StoredSubcategory[] = fbSubs.length > 0
-    ? fbSubs.map(fbSubToStored)
-    : seedSubs;
-  const tracks: UnifiedTrack[] = seedTracks;
-  const loading = !seedLoaded;
+  // Prefer Firebase; fall back to local seeded category
+  const catData = fbCat ?? seedCat;
 
+  // ── 2. Fetch subcategories for this category (real-time) ─────────────────
+  const { subcategories, loading: subsLoading } = useSubcategories(id ?? "");
+
+  // ── 3. Fetch all cards for this category (for count badges) ───────────────
+  const { cards: catCards, loading: cardsLoading } = useCardsByCategory(id ?? "");
+
+  // Card count per subcategory
+  const cardCounts = catCards.reduce<Record<string, number>>((acc, c) => {
+    acc[c.subcategoryId] = (acc[c.subcategoryId] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  // ── Loading / ready states ───────────────────────────────────────────────
+  // Show skeleton while we don't have EITHER the category OR subs yet
+  const loading = fbCatLoading || subsLoading;
+
+  // ── Stagger animations ───────────────────────────────────────────────────
   const cardAnims = useRef<Animated.Value[]>([]).current;
-
-  // Load seeded data (category metadata + fallback subcategories + tracks)
-  useFocusEffect(useCallback(() => {
-    setSeedLoaded(false);
-    setShowAll(false);
-    setVisible(15);
-    Promise.all([
-      getCategoryById(id ?? ""),
-      getSubcategoriesByCategory(id ?? ""),
-      getTracksByCategory(id ?? ""),
-    ]).then(([cat, subs, trks]) => {
-      setCategory(cat);
-      setSeedSubs(subs);
-      setSeedTracks(trks);
-      setSeedLoaded(true);
-    });
-  }, [id]));
-
-  // Trigger stagger animation when subcategories are ready
   useEffect(() => {
     if (loading || subcategories.length === 0) return;
-    if (subcategories.length === 0) { setShowAll(true); return; }
     cardAnims.length = 0;
-    const total = subcategories.length + 1;
-    for (let i = 0; i < total; i++) cardAnims.push(new Animated.Value(0));
+    for (let i = 0; i < subcategories.length; i++) cardAnims.push(new Animated.Value(0));
     setTimeout(() => {
-      Animated.stagger(60,
-        cardAnims.map(a => Animated.spring(a, { toValue: 1, useNativeDriver: true, tension: 85, friction: 11 }))
-      ).start();
+      Animated.stagger(70, cardAnims.map(a =>
+        Animated.spring(a, { toValue: 1, useNativeDriver: true, tension: 85, friction: 11 })
+      )).start();
     }, 50);
   }, [loading, subcategories.length]);
 
-  const color = category?.color ?? "#1a7a4a";
+  // ── Colors ───────────────────────────────────────────────────────────────
+  const color    = catData?.color ?? C.green;
+  const bg       = isDark ? C.bgDark : C.bg;
+  const cardBg   = isDark ? C.cardDark : C.cardBg;
+  const textMain = isDark ? C.txtDark  : C.txt;
+  const textSub  = isDark ? C.subDark  : C.sub;
+  const hdrBdr   = isDark ? C.bdr      : C.border;
 
-  const subCounts: Record<string, number> = {};
-  let unassigned = 0;
-  for (const t of tracks) {
-    if (t.subcategoryId) subCounts[t.subcategoryId] = (subCounts[t.subcategoryId] ?? 0) + 1;
-    else unassigned++;
-  }
-
-  const playlist      = tracks.map(unifiedToTrack);
-  const visibleTracks = tracks.slice(0, visibleCount);
-
-  // Color tokens
-  const bg       = isDark ? "#0a0e0c" : "#f4faf6";
-  const cardBg   = isDark ? "#111816" : "#ffffff";
-  const hdrBdr   = isDark ? "#1e2e24" : "#d4ead9";
-  const textMain = isDark ? "#e0f0e8" : "#0d2414";
-  const textSub  = isDark ? "#5a9a6a" : "#4a7a5a";
-
-  if (!loading && !category) {
+  // ── "Not found" guard ────────────────────────────────────────────────────
+  if (!loading && !catData) {
     return (
       <View style={[styles.screen, { backgroundColor: bg }]}>
         <SafeAreaView edges={["top"]} style={{ flex: 1 }}>
-          <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: "#1a7a4a18" }]}>
-            <Ionicons name="arrow-back" size={18} color="#1a7a4a" />
+          <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: C.green + "18" }]}>
+            <Ionicons name="arrow-back" size={18} color={C.green} />
           </Pressable>
           <View style={styles.centered}>
             <Text style={{ fontSize: 44 }}>❓</Text>
-            <Text style={[styles.emptyTxt, { color: textSub }]}>பிரிவு கிடைக்கவில்லை</Text>
+            <Text style={[styles.emptyTitle, { color: textSub }]}>பிரிவு கிடைக்கவில்லை</Text>
           </View>
         </SafeAreaView>
       </View>
@@ -302,28 +250,56 @@ export default function CategoryScreen() {
 
         {/* ── Header ── */}
         <View style={[styles.header, { borderBottomColor: hdrBdr }]}>
-          <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: color + "18", borderColor: color + "44" }]}>
+          <Pressable
+            onPress={() => router.back()}
+            style={[styles.backBtn, { backgroundColor: color + "18", borderColor: color + "44" }]}
+          >
             <Ionicons name="arrow-back" size={18} color={color} />
           </Pressable>
           <View style={styles.hdrCenter}>
-            <View style={[styles.hdrIconBox, { backgroundColor: color + "22" }]}>
-              <Text style={styles.hdrEmoji}>{category?.icon ?? "📂"}</Text>
-            </View>
+            {catData ? (
+              <View style={[styles.hdrIconBox, { backgroundColor: color + "22" }]}>
+                <Text style={styles.hdrEmoji}>{catData.icon}</Text>
+              </View>
+            ) : (
+              <ActivityIndicator size="small" color={color} />
+            )}
             <View style={{ flex: 1 }}>
               <Text style={[styles.hdrTitle, { color: textMain }]} numberOfLines={1}>
-                {category?.name ?? ""}
+                {catData?.name ?? ""}
               </Text>
-              <Text style={[styles.hdrSub, { color: textSub }]}>
-                {subcategories.length > 0
-                  ? `${subcategories.length} Subcategories • ${tracks.length} tracks`
-                  : `${tracks.length} tracks`}
+              {catData && (catData as FBCategory).nameEn ? (
+                <Text style={[styles.hdrEn, { color: textSub }]} numberOfLines={1}>
+                  {(catData as FBCategory).nameEn}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+          {!loading && (
+            <View style={[styles.hdrBadge, { backgroundColor: color + "18", borderColor: color + "44" }]}>
+              <Text style={[styles.hdrBadgeTxt, { color }]}>{subcategories.length}</Text>
+            </View>
+          )}
+        </View>
+
+        {/* ── Stats row ── */}
+        {!loading && catData && (
+          <View style={[styles.statsRow, { backgroundColor: color + "12", borderBottomColor: color + "22" }]}>
+            <View style={styles.statItem}>
+              <Ionicons name="git-branch-outline" size={13} color={color} />
+              <Text style={[styles.statTxt, { color }]}>
+                {subcategories.length} உப-பிரிவுகள்
+              </Text>
+            </View>
+            <View style={[styles.statDiv, { backgroundColor: color + "44" }]} />
+            <View style={styles.statItem}>
+              <Ionicons name="headset-outline" size={13} color={color} />
+              <Text style={[styles.statTxt, { color }]}>
+                {catCards.length} பாடங்கள்
               </Text>
             </View>
           </View>
-          <View style={[styles.hdrBadge, { backgroundColor: color + "18", borderColor: color + "44" }]}>
-            <Text style={[styles.hdrBadgeTxt, { color }]}>{tracks.length}</Text>
-          </View>
-        </View>
+        )}
 
         {/* ── Body ── */}
         {loading ? (
@@ -333,98 +309,41 @@ export default function CategoryScreen() {
             </View>
           </ScrollView>
         ) : (
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
 
-            {/* ─── SUBCATEGORY CARD GRID ─── */}
-            {!showAll && subcategories.length > 0 && (
+            {subcategories.length === 0 ? (
+              <EmptySubcategories color={color} isDark={isDark} />
+            ) : (
               <>
+                {/* Section heading */}
                 <View style={styles.sectionRow}>
                   <View style={[styles.sectionDot, { backgroundColor: color }]} />
                   <Text style={[styles.sectionTitle, { color: textMain }]}>
-                    Subcategories
+                    உப-பிரிவுகள்
                   </Text>
                   <Text style={[styles.sectionCount, { color: textSub }]}>
                     {subcategories.length}
                   </Text>
                 </View>
 
+                {/* Subcategory grid */}
                 <View style={styles.grid}>
                   {subcategories.map((sub, i) => (
                     <SubCard
                       key={sub.id}
                       sub={sub}
                       color={color}
-                      trackCount={subCounts[sub.id] ?? 0}
+                      cardCount={cardCounts[sub.id] ?? 0}
                       isDark={isDark}
-                      entryAnim={cardAnims[i] ?? new Animated.Value(1)}
+                      anim={cardAnims[i] ?? new Animated.Value(1)}
                       onPress={() => router.push(`/subcategory/${sub.id}` as any)}
                     />
                   ))}
-
-                  {/* Unassigned */}
-                  {unassigned > 0 && (
-                    <SubCard
-                      key="__unassigned"
-                      sub={{ id: "__unassigned", categoryId: id ?? "", name: "பொது பாடங்கள்", nameEn: "General", sortOrder: 999, createdAt: 0 }}
-                      color="#888888"
-                      trackCount={unassigned}
-                      isDark={isDark}
-                      entryAnim={cardAnims[subcategories.length] ?? new Animated.Value(1)}
-                      onPress={() => router.push(`/subcategory/unassigned?categoryId=${id}` as any)}
-                    />
-                  )}
                 </View>
-
-                {/* See all tracks */}
-                <AllCard color={color} count={tracks.length} isDark={isDark} onPress={() => setShowAll(true)} />
-              </>
-            )}
-
-            {/* ─── ALL TRACKS ─── */}
-            {showAll && (
-              <>
-                {subcategories.length > 0 && (
-                  <Pressable
-                    style={[styles.backSubBtn, { borderColor: color + "44" }]}
-                    onPress={() => setShowAll(false)}
-                  >
-                    <Ionicons name="grid-outline" size={14} color={color} />
-                    <Text style={[styles.backSubTxt, { color }]}>
-                      Subcategories
-                    </Text>
-                  </Pressable>
-                )}
-
-                <View style={styles.sectionRow}>
-                  <View style={[styles.sectionDot, { backgroundColor: color }]} />
-                  <Text style={[styles.sectionTitle, { color: textMain }]}>
-                    All Tracks
-                  </Text>
-                  <Text style={[styles.sectionCount, { color: textSub }]}>{tracks.length}</Text>
-                </View>
-
-                {visibleTracks.map((track, i) => (
-                  <GameLevelCard key={track.id} track={unifiedToTrack(track)} levelNumber={i + 1} playlist={playlist} />
-                ))}
-
-                {visibleCount < tracks.length && (
-                  <Pressable
-                    onPress={() => setVisible(v => v + 15)}
-                    style={[styles.loadMore, { borderColor: color + "44" }]}
-                  >
-                    <Text style={[styles.loadMoreTxt, { color }]}>
-                      {Math.min(15, tracks.length - visibleCount)} more tracks
-                    </Text>
-                    <Ionicons name="chevron-down" size={16} color={color} />
-                  </Pressable>
-                )}
-
-                {tracks.length === 0 && (
-                  <View style={styles.centered}>
-                    <Text style={{ fontSize: 44 }}>🎵</Text>
-                    <Text style={[styles.emptyTxt, { color: textSub }]}>No tracks yet</Text>
-                  </View>
-                )}
               </>
             )}
 
@@ -439,10 +358,10 @@ export default function CategoryScreen() {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
 
-  // Header
   header: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1,
@@ -455,29 +374,31 @@ const styles = StyleSheet.create({
   hdrIconBox: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center" },
   hdrEmoji: { fontSize: 20 },
   hdrTitle: { fontSize: 15, fontWeight: "800", letterSpacing: -0.3 },
-  hdrSub: { fontSize: 11, marginTop: 1 },
+  hdrEn: { fontSize: 11, marginTop: 1 },
   hdrBadge: {
     borderRadius: 12, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4,
   },
   hdrBadgeTxt: { fontSize: 13, fontWeight: "800" },
 
-  // Scroll
+  statsRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  statItem: { flex: 1, flexDirection: "row", alignItems: "center", gap: 6, justifyContent: "center" },
+  statTxt: { fontSize: 12, fontWeight: "700" },
+  statDiv: { width: 1, height: 20 },
+
   scrollContent: { paddingHorizontal: 16, paddingTop: 18 },
   gridWrap: { paddingHorizontal: 16, paddingTop: 18 },
 
-  // Section row
   sectionRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 14 },
   sectionDot: { width: 4, height: 18, borderRadius: 2 },
   sectionTitle: { fontSize: 14, fontWeight: "700", flex: 1 },
   sectionCount: { fontSize: 13, fontWeight: "600" },
 
-  // 2-column grid
-  grid: {
-    flexDirection: "row", flexWrap: "wrap",
-    gap: CARD_GAP, marginBottom: 16,
-  },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: CARD_GAP, marginBottom: 16 },
 
-  // ── Sub card ──
   subCard: {
     borderRadius: 16, borderWidth: 1, overflow: "hidden",
     paddingBottom: 14,
@@ -490,62 +411,41 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
     alignSelf: "center", marginBottom: 12,
   },
-  cardMainTitle: {
+  cardTamil: {
     fontSize: 14, fontWeight: "800", textAlign: "center",
-    paddingHorizontal: 12, lineHeight: 20, marginBottom: 4,
+    paddingHorizontal: 10, lineHeight: 20, marginBottom: 2,
   },
-  cardSubTitle: {
+  cardEnglish: {
     fontSize: 11, fontWeight: "500", textAlign: "center",
-    paddingHorizontal: 12, lineHeight: 16, marginBottom: 8,
+    paddingHorizontal: 10, lineHeight: 16, marginBottom: 8,
   },
   cardBottom: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 12, marginTop: 4,
+    paddingHorizontal: 10, marginTop: 4,
   },
   countPill: {
     flexDirection: "row", alignItems: "center", gap: 4,
     paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20,
   },
-  countPillTxt: { fontSize: 11, fontWeight: "700" },
+  countTxt: { fontSize: 10, fontWeight: "700" },
   arrowCircle: {
     width: 24, height: 24, borderRadius: 12, borderWidth: 1,
     alignItems: "center", justifyContent: "center",
   },
 
-  // "All" banner card
-  allCard: {
-    flexDirection: "row", alignItems: "center", gap: 12,
-    borderRadius: 14, borderWidth: 1.5, padding: 14,
-    marginBottom: 16,
-  },
-  allIconBox: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: "center", justifyContent: "center",
-  },
-  allCardMain: { fontSize: 14, fontWeight: "800" },
-  allCardSub: { fontSize: 11, marginTop: 2 },
-
-  // Skeleton
-  skelIcon: { width: 50, height: 50, borderRadius: 25, alignSelf: "center", marginBottom: 12, marginTop: 18 },
+  skelIcon:  { width: 50, height: 50, borderRadius: 25, alignSelf: "center", marginBottom: 12, marginTop: 18 },
   skelLine1: { height: 12, borderRadius: 6, marginHorizontal: 16, marginBottom: 8 },
   skelLine2: { height: 10, borderRadius: 5, marginHorizontal: 24, marginBottom: 12 },
 
-  // Back to subs
-  backSubBtn: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    alignSelf: "flex-start", borderWidth: 1, borderRadius: 20,
-    paddingHorizontal: 14, paddingVertical: 7, marginBottom: 16,
+  emptyBox: {
+    alignItems: "center", paddingTop: 60, paddingHorizontal: 32, gap: 14,
   },
-  backSubTxt: { fontSize: 12, fontWeight: "700" },
-
-  // Load more
-  loadMore: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 8, paddingVertical: 14, marginTop: 6,
-    borderWidth: 1, borderRadius: 12, marginHorizontal: 4,
+  emptyIconBox: {
+    width: 72, height: 72, borderRadius: 36,
+    alignItems: "center", justifyContent: "center", marginBottom: 4,
   },
-  loadMoreTxt: { fontSize: 13, fontWeight: "700" },
+  emptyTitle: { fontSize: 16, fontWeight: "800", textAlign: "center" },
+  emptyHint:  { fontSize: 12, textAlign: "center", lineHeight: 18 },
 
   centered: { alignItems: "center", justifyContent: "center", paddingVertical: 80, gap: 12 },
-  emptyTxt: { fontSize: 14, textAlign: "center" },
 });

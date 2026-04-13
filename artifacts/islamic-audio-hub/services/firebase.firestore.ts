@@ -216,6 +216,56 @@ export async function getCards(subcategoryId?: string, categoryId?: string): Pro
   return all;
 }
 
+// ─── Single-document listeners ────────────────────────────────────────────────
+
+export function subscribeCategory(
+  id: string,
+  onData: (cat: FBCategory | null) => void,
+  onError?: (e: Error) => void
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, "categories", id),
+    snap => {
+      if (!snap.exists()) { onData(null); return; }
+      onData(toFBCategory(snap.id, snap.data() as Record<string, any>));
+    },
+    err => onError?.(err)
+  );
+}
+
+export function subscribeSubcategory(
+  id: string,
+  onData: (sub: FBSubcategory | null) => void,
+  onError?: (e: Error) => void
+): Unsubscribe {
+  return onSnapshot(
+    doc(db, "subcategories", id),
+    snap => {
+      if (!snap.exists()) { onData(null); return; }
+      onData(toFBSubcategory(snap.id, snap.data() as Record<string, any>));
+    },
+    err => onError?.(err)
+  );
+}
+
+export function subscribeCardsByCategory(
+  categoryId: string,
+  onData: (cards: FBCard[]) => void,
+  onError?: (e: Error) => void
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, "cards"),
+    snap => {
+      const cards = snap.docs
+        .map(d => toFBCard(d.id, d.data() as Record<string, any>))
+        .filter(c => c.categoryId === categoryId)
+        .sort(bySort);
+      onData(cards);
+    },
+    err => onError?.(err)
+  );
+}
+
 // ─── Real-time listeners (no composite index needed — filter in JS) ────────────
 
 export function subscribeCategories(

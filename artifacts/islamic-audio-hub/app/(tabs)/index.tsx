@@ -200,7 +200,7 @@ export default function HomeScreen() {
   const { isDarkMode: isDark } = useApp();
 
   // ── Firebase real-time data ──────────────────────────────────────────────
-  const { categories: fbCats, loading: fbCatsLoading } = useCategories();
+  const { categories: fbCats, loading: fbCatsLoading, error: fbCatError } = useCategories();
   const { cards: fbCards, loading: fbCardsLoading }    = useAllCards();
 
   // ── Seeded (AsyncStorage) fallback data ──────────────────────────────────
@@ -346,6 +346,20 @@ export default function HomeScreen() {
       >
         {/* Bismillah */}
         <BismillahBanner isDark={isDark} />
+
+        {/* Firebase error banner — shown only when Firestore is blocked */}
+        {fbCatError && fbCats.length === 0 && (
+          <View style={styles.fbErrorBanner}>
+            <Ionicons name="cloud-offline-outline" size={16} color="#c0392b" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fbErrorTitle}>Firebase அணுகல் பிழை</Text>
+              <Text style={styles.fbErrorMsg}>
+                Firestore Security Rules → Test mode-ல் வைக்கவும்.{"\n"}
+                Error: {fbCatError}
+              </Text>
+            </View>
+          </View>
+        )}
 
         {/* Featured free track */}
         {!loading && <FeaturedTrack tracks={allTracks} categories={categories} isDark={isDark} />}
@@ -519,6 +533,15 @@ const styles = StyleSheet.create({
     borderRadius: 10, paddingHorizontal: 10, paddingVertical: 3,
   },
   sectionBadgeTxt: { fontSize: 12, fontWeight: "800" },
+
+  // Firebase error banner
+  fbErrorBanner: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    backgroundColor: "#fdf0ef", borderColor: "#e8a89e",
+    borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 14,
+  },
+  fbErrorTitle: { color: "#c0392b", fontWeight: "800", fontSize: 13, marginBottom: 2 },
+  fbErrorMsg:   { color: "#a93226", fontSize: 11, lineHeight: 16 },
 
   // Grid
   grid: {

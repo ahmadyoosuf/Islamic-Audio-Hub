@@ -272,15 +272,33 @@ export function subscribeCategories(
   onData: (cats: FBCategory[]) => void,
   onError?: (e: Error) => void
 ): Unsubscribe {
+  // Immediate one-time fetch as a guaranteed backup (survives onSnapshot permission errors)
+  getDocs(collection(db, "categories"))
+    .then(snap => {
+      const cats = snap.docs
+        .map(d => toFBCategory(d.id, d.data() as Record<string, any>))
+        .sort(bySort);
+      console.log("[Firebase] getDocs categories:", cats.length, "docs");
+      onData(cats);
+    })
+    .catch(err => {
+      console.error("[Firebase] getDocs categories FAILED:", err.code, err.message);
+    });
+
+  // Real-time listener (keeps data fresh after initial load)
   return onSnapshot(
     collection(db, "categories"),
     snap => {
       const cats = snap.docs
         .map(d => toFBCategory(d.id, d.data() as Record<string, any>))
         .sort(bySort);
+      console.log("[Firebase] onSnapshot categories:", cats.length, "docs");
       onData(cats);
     },
-    err => onError?.(err)
+    err => {
+      console.error("[Firebase] onSnapshot categories FAILED:", err.code, err.message);
+      onError?.(err);
+    }
   );
 }
 
@@ -289,6 +307,17 @@ export function subscribeSubcategories(
   onData: (subs: FBSubcategory[]) => void,
   onError?: (e: Error) => void
 ): Unsubscribe {
+  getDocs(collection(db, "subcategories"))
+    .then(snap => {
+      const subs = snap.docs
+        .map(d => toFBSubcategory(d.id, d.data() as Record<string, any>))
+        .filter(s => s.categoryId === categoryId)
+        .sort(bySort);
+      console.log("[Firebase] getDocs subcategories for", categoryId, ":", subs.length);
+      onData(subs);
+    })
+    .catch(err => console.error("[Firebase] getDocs subcategories FAILED:", err.code, err.message));
+
   return onSnapshot(
     collection(db, "subcategories"),
     snap => {
@@ -298,7 +327,10 @@ export function subscribeSubcategories(
         .sort(bySort);
       onData(subs);
     },
-    err => onError?.(err)
+    err => {
+      console.error("[Firebase] onSnapshot subcategories FAILED:", err.code, err.message);
+      onError?.(err);
+    }
   );
 }
 
@@ -307,6 +339,17 @@ export function subscribeCards(
   onData: (cards: FBCard[]) => void,
   onError?: (e: Error) => void
 ): Unsubscribe {
+  getDocs(collection(db, "cards"))
+    .then(snap => {
+      const cards = snap.docs
+        .map(d => toFBCard(d.id, d.data() as Record<string, any>))
+        .filter(c => c.subcategoryId === subcategoryId)
+        .sort(bySort);
+      console.log("[Firebase] getDocs cards for subcategory", subcategoryId, ":", cards.length);
+      onData(cards);
+    })
+    .catch(err => console.error("[Firebase] getDocs cards FAILED:", err.code, err.message));
+
   return onSnapshot(
     collection(db, "cards"),
     snap => {
@@ -316,7 +359,10 @@ export function subscribeCards(
         .sort(bySort);
       onData(cards);
     },
-    err => onError?.(err)
+    err => {
+      console.error("[Firebase] onSnapshot cards FAILED:", err.code, err.message);
+      onError?.(err);
+    }
   );
 }
 
@@ -324,6 +370,16 @@ export function subscribeAllCards(
   onData: (cards: FBCard[]) => void,
   onError?: (e: Error) => void
 ): Unsubscribe {
+  getDocs(collection(db, "cards"))
+    .then(snap => {
+      const cards = snap.docs
+        .map(d => toFBCard(d.id, d.data() as Record<string, any>))
+        .sort(bySort);
+      console.log("[Firebase] getDocs allCards:", cards.length);
+      onData(cards);
+    })
+    .catch(err => console.error("[Firebase] getDocs allCards FAILED:", err.code, err.message));
+
   return onSnapshot(
     collection(db, "cards"),
     snap => {
@@ -332,6 +388,9 @@ export function subscribeAllCards(
         .sort(bySort);
       onData(cards);
     },
-    err => onError?.(err)
+    err => {
+      console.error("[Firebase] onSnapshot allCards FAILED:", err.code, err.message);
+      onError?.(err);
+    }
   );
 }

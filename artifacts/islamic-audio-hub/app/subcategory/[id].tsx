@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import {
   ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
@@ -16,7 +16,19 @@ import {
   type StoredSubcategory,
   type UnifiedTrack,
 } from "@/data/unifiedStorage";
+import { useCards } from "@/hooks/useFirebaseData";
+import type { FBCard } from "@/services/firebase.firestore";
 import type { Track } from "@/context/AppContext";
+
+function fbCardToUnified(c: FBCard, categoryName: string): UnifiedTrack {
+  return {
+    id: c.id, title: c.titleTa || c.titleEn, categoryId: c.categoryId, categoryName,
+    subcategoryId: c.subcategoryId, duration: c.duration, audioUrl: c.audioUrl,
+    viewCount: c.viewCount, isPremium: c.isPremium, sortOrder: c.sortOrder,
+    hasQuiz: c.hasQuiz, isBuiltIn: false, description: c.description,
+    fileName: undefined, uploadedAt: c.createdAt,
+  };
+}
 
 function unifiedToTrack(u: UnifiedTrack): Track {
   return {
@@ -34,28 +46,36 @@ export default function SubcategoryScreen() {
 
   const isUnassigned = id === "unassigned";
 
-  const [category, setCategory] = useState<StoredCategory | null>(null);
-  const [subcategory, setSubcategory] = useState<StoredSubcategory | null>(null);
-  const [tracks, setTracks] = useState<UnifiedTrack[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [category,    setCategory]   = useState<StoredCategory | null>(null);
+  const [subcategory, setSubcategory]= useState<StoredSubcategory | null>(null);
+  const [seedTracks,  setSeedTracks] = useState<UnifiedTrack[]>([]);
+  const [seedLoaded,  setSeedLoaded] = useState(false);
+  const [error,       setError]      = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(20);
+
+  // Firebase real-time cards for this subcategory
+  const { cards: fbCards, loading: fbCardsLoading } = useCards(isUnassigned ? "" : (id ?? ""));
+
+  // Merge: prefer Firebase cards; fall back to seeded tracks
+  const tracks: UnifiedTrack[] = fbCards.length > 0
+    ? fbCards.map(c => fbCardToUnified(c, category?.name ?? ""))
+    : seedTracks;
+  const loading = !seedLoaded;
 
   useFocusEffect(
     useCallback(() => {
-      load();
+      setSeedLoaded(false);
+      setError(null);
+      loadSeed();
     }, [id, qCategoryId])
   );
 
-  async function load() {
-    setLoading(true);
-    setError(null);
+  async function loadSeed() {
     try {
       const allTracks = await getAllTracks();
       let catId = qCategoryId ?? "";
 
       if (!isUnassigned) {
-        // Resolve category from a track that has this subcategoryId
         if (!catId) {
           const sample = allTracks.find(t => t.subcategoryId === id);
           catId = sample?.categoryId ?? "";
@@ -74,19 +94,19 @@ export default function SubcategoryScreen() {
           .filter(t => t.categoryId === catId && !t.subcategoryId)
           .sort((a, b) => a.sortOrder - b.sortOrder);
         setSubcategory(null);
-        setTracks(filtered);
+        setSeedTracks(filtered);
       } else {
         const sub = subs.find(s => s.id === id) ?? null;
         setSubcategory(sub);
         const filtered = allTracks
           .filter(t => t.subcategoryId === id)
           .sort((a, b) => a.sortOrder - b.sortOrder);
-        setTracks(filtered);
+        setSeedTracks(filtered);
       }
     } catch (e) {
       setError("தரவு ஏற்ற முடியவில்லை. மீண்டும் முயற்சிக்கவும்.");
     } finally {
-      setLoading(false);
+      setSeedLoaded(true);
     }
   }
 

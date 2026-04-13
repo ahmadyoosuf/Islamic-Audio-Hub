@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter, useFocusEffect } from "expo-router";
-import React, { useState, useCallback, useRef } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   Animated,
   Dimensions,
@@ -23,7 +23,23 @@ import {
   type StoredSubcategory,
   type UnifiedTrack,
 } from "@/data/unifiedStorage";
+import { useSubcategories, useCards } from "@/hooks/useFirebaseData";
+import type { FBSubcategory, FBCard } from "@/services/firebase.firestore";
 import type { Track } from "@/context/AppContext";
+
+// ─── Adapters ─────────────────────────────────────────────────────────────────
+function fbSubToStored(s: FBSubcategory): StoredSubcategory {
+  return { id: s.id, categoryId: s.categoryId, name: s.name, nameEn: s.nameEn, sortOrder: s.sortOrder, createdAt: s.createdAt };
+}
+function fbCardToUnified(c: FBCard, categoryName: string): UnifiedTrack {
+  return {
+    id: c.id, title: c.titleTa || c.titleEn, categoryId: c.categoryId, categoryName,
+    subcategoryId: c.subcategoryId, duration: c.duration, audioUrl: c.audioUrl,
+    viewCount: c.viewCount, isPremium: c.isPremium, sortOrder: c.sortOrder,
+    hasQuiz: c.hasQuiz, isBuiltIn: false, description: c.description,
+    fileName: undefined, uploadedAt: c.createdAt,
+  };
+}
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_GAP  = 12;
@@ -195,17 +211,28 @@ export default function CategoryScreen() {
   const { isDarkMode } = useApp();
   const isDark = isDarkMode;
 
-  const [category,      setCategory]  = useState<StoredCategory | null>(null);
-  const [subcategories, setSubcats]   = useState<StoredSubcategory[]>([]);
-  const [tracks,        setTracks]    = useState<UnifiedTrack[]>([]);
-  const [loading,       setLoading]   = useState(true);
-  const [showAll,       setShowAll]   = useState(false);
-  const [visibleCount,  setVisible]   = useState(15);
+  const [category,     setCategory]  = useState<StoredCategory | null>(null);
+  const [seedSubs,     setSeedSubs]  = useState<StoredSubcategory[]>([]);
+  const [seedTracks,   setSeedTracks]= useState<UnifiedTrack[]>([]);
+  const [seedLoaded,   setSeedLoaded]= useState(false);
+  const [showAll,      setShowAll]   = useState(false);
+  const [visibleCount, setVisible]   = useState(15);
+
+  // Firebase real-time data
+  const { subcategories: fbSubs, loading: fbSubsLoading } = useSubcategories(id ?? "");
+
+  // Derive merged data
+  const subcategories: StoredSubcategory[] = fbSubs.length > 0
+    ? fbSubs.map(fbSubToStored)
+    : seedSubs;
+  const tracks: UnifiedTrack[] = seedTracks;
+  const loading = !seedLoaded;
 
   const cardAnims = useRef<Animated.Value[]>([]).current;
 
+  // Load seeded data (category metadata + fallback subcategories + tracks)
   useFocusEffect(useCallback(() => {
-    setLoading(true);
+    setSeedLoaded(false);
     setShowAll(false);
     setVisible(15);
     Promise.all([
@@ -214,21 +241,25 @@ export default function CategoryScreen() {
       getTracksByCategory(id ?? ""),
     ]).then(([cat, subs, trks]) => {
       setCategory(cat);
-      setSubcats(subs);
-      setTracks(trks);
-      if (subs.length === 0) setShowAll(true);
-
-      cardAnims.length = 0;
-      const total = subs.length + 1;
-      for (let i = 0; i < total; i++) cardAnims.push(new Animated.Value(0));
-      setLoading(false);
-      setTimeout(() => {
-        Animated.stagger(60,
-          cardAnims.map(a => Animated.spring(a, { toValue: 1, useNativeDriver: true, tension: 85, friction: 11 }))
-        ).start();
-      }, 50);
+      setSeedSubs(subs);
+      setSeedTracks(trks);
+      setSeedLoaded(true);
     });
   }, [id]));
+
+  // Trigger stagger animation when subcategories are ready
+  useEffect(() => {
+    if (loading || subcategories.length === 0) return;
+    if (subcategories.length === 0) { setShowAll(true); return; }
+    cardAnims.length = 0;
+    const total = subcategories.length + 1;
+    for (let i = 0; i < total; i++) cardAnims.push(new Animated.Value(0));
+    setTimeout(() => {
+      Animated.stagger(60,
+        cardAnims.map(a => Animated.spring(a, { toValue: 1, useNativeDriver: true, tension: 85, friction: 11 }))
+      ).start();
+    }, 50);
+  }, [loading, subcategories.length]);
 
   const color = category?.color ?? "#1a7a4a";
 

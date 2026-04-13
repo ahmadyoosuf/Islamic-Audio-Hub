@@ -186,6 +186,25 @@ export default function AdminDashboard() {
         <Text style={[styles.catArrow, { color: '#9C27B0' }]}>›</Text>
       </TouchableOpacity>
 
+      <View style={styles.divider} />
+      <Text style={styles.sectionTitle}>🔥 Firebase CMS</Text>
+      <Text style={styles.sectionSub}>Firestore real-time database + Storage audio upload</Text>
+
+      <TouchableOpacity
+        style={[styles.cmsCard, { borderColor: '#f0bc4266' }]}
+        onPress={() => router.push('/admin/firebase' as any)}
+        activeOpacity={0.75}
+      >
+        <View style={[styles.catIconBox, { backgroundColor: '#f0bc4222' }]}>
+          <Text style={styles.catIcon}>🔥</Text>
+        </View>
+        <View style={styles.catInfo}>
+          <Text style={styles.catName}>Firebase Data Manager</Text>
+          <Text style={styles.catMeta}>Add / Edit / Delete — real-time sync to all devices</Text>
+        </View>
+        <Text style={[styles.catArrow, { color: '#f0bc42' }]}>›</Text>
+      </TouchableOpacity>
+
       <View style={{ height: 40 }} />
     </ScrollView>
   );

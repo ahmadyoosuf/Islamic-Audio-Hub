@@ -42,6 +42,17 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
   - **Frontend flow**: `/cms` → category grid → `/cms/sub` → subcategory list → `/cms/cards` → card list (with track count badge) → `/cms/card` → track list → `/cms/track/[id]` → audio player with quiz modal + share
   - Home screen has Library banner (purple, "புதியது" badge) below the 5 categories
 - **5-tab nav**: Home, Favorites (பிடித்தவை), Profile (சுயவிவரம்), About (பற்றி), Request (கோரிக்கை — opens modal)
+- **Firebase Integration** (added):
+  - Project: `bismillah-573d3` (Firebase config in `services/firebase.config.ts`)
+  - Firestore collections: `categories`, `subcategories`, `cards`
+  - CRUD functions in `services/firebase.firestore.ts`: `addCategory`, `addSubCategory`, `addCard`, `updateCard`, `deleteCard`, `getCategories`, `getSubcategories`, `getCards`
+  - Real-time listeners: `subscribeCategories`, `subscribeSubcategories`, `subscribeCards`, `subscribeAllCards` (using onSnapshot)
+  - Firebase Storage audio upload in `services/firebase.storage.ts`: `uploadAudio` (with progress), `deleteAudio`, `getAudioUrl`
+  - React hooks in `hooks/useFirebaseData.ts`: `useCategories`, `useSubcategories`, `useCards`, `useAllCards`
+  - Data strategy: Firebase is primary source; seeded AsyncStorage data is fallback (shown immediately while Firebase loads)
+  - Firebase CMS admin panel: `app/admin/firebase/index.tsx` — 3-tab UI (Categories / Subcategories / Cards) with full CRUD + audio upload
+  - Metro config: `unstable_enablePackageExports: true` required for Firebase v11 conditional exports; `_tmp_\d+` blockList prevents pnpm temp dir watcher crashes
+  - **IMPORTANT**: Must create Firestore database in Firebase Console and set security rules before data flows. Firebase Storage bucket must also be enabled.
 
 ## Key Commands
 

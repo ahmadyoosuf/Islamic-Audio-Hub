@@ -22,6 +22,22 @@ import {
   type UnifiedTrack,
   type StoredCategory,
 } from "@/data/unifiedStorage";
+import { useCategories, useAllCards } from "@/hooks/useFirebaseData";
+import type { FBCategory, FBCard } from "@/services/firebase.firestore";
+
+// ─── Adapters ─────────────────────────────────────────────────────────────────
+function fbCatToStored(c: FBCategory): StoredCategory {
+  return { id: c.id, name: c.name, icon: c.icon, color: c.color, description: c.description, sortOrder: c.sortOrder, createdAt: c.createdAt };
+}
+function fbCardToTrack(c: FBCard): UnifiedTrack {
+  return {
+    id: c.id, title: c.titleTa || c.titleEn, categoryId: c.categoryId, categoryName: "",
+    subcategoryId: c.subcategoryId, duration: c.duration, audioUrl: c.audioUrl,
+    viewCount: c.viewCount, isPremium: c.isPremium, sortOrder: c.sortOrder,
+    hasQuiz: c.hasQuiz, isBuiltIn: false, description: c.description,
+    fileName: undefined, uploadedAt: c.createdAt,
+  };
+}
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const CARD_GAP = 12;
@@ -183,41 +199,57 @@ export default function HomeScreen() {
   const router = useRouter();
   const { isDarkMode: isDark } = useApp();
 
-  const [allTracks, setAllTracks] = useState<UnifiedTrack[]>([]);
-  const [categories, setCategories] = useState<StoredCategory[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
+  // ── Firebase real-time data ──────────────────────────────────────────────
+  const { categories: fbCats, loading: fbCatsLoading } = useCategories();
+  const { cards: fbCards, loading: fbCardsLoading }    = useAllCards();
+
+  // ── Seeded (AsyncStorage) fallback data ──────────────────────────────────
+  const [seedTracks, setSeedTracks]   = useState<UnifiedTrack[]>([]);
+  const [seedCats,   setSeedCats]     = useState<StoredCategory[]>([]);
+  const [seedLoaded, setSeedLoaded]   = useState(false);
+
+  const [search,   setSearch]   = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Staggered card animation refs
   const cardAnims = useRef<Animated.Value[]>([]).current;
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      Promise.all([getAllTracks(), getAllCategories()]).then(([tracks, cats]) => {
-        setAllTracks(tracks);
-        setCategories(cats);
-        // Init card animations
-        if (cardAnims.length !== cats.length) {
-          cardAnims.length = 0;
-          cats.forEach(() => cardAnims.push(new Animated.Value(0)));
-        } else {
-          cardAnims.forEach(a => a.setValue(0));
-        }
-        setLoading(false);
-        // Stagger cards in
-        setTimeout(() => {
-          Animated.stagger(
-            60,
-            cardAnims.map(a =>
-              Animated.spring(a, { toValue: 1, useNativeDriver: true, tension: 80, friction: 10 })
-            )
-          ).start();
-        }, 50);
-      });
-    }, [])
-  );
+  // Load seeded data once on mount (for fallback when Firebase is empty)
+  useEffect(() => {
+    Promise.all([getAllTracks(), getAllCategories()]).then(([tracks, cats]) => {
+      setSeedTracks(tracks);
+      setSeedCats(cats);
+      setSeedLoaded(true);
+    });
+  }, []);
+
+  // Show seeded data as soon as it's ready; overlay Firebase data when it arrives
+  const loading    = !seedLoaded;
+  const categories: StoredCategory[] = fbCats.length > 0
+    ? fbCats.map(fbCatToStored)
+    : seedCats;
+  const allTracks: UnifiedTrack[] = fbCards.length > 0
+    ? fbCards.map(fbCardToTrack)
+    : seedTracks;
+
+  // Stagger animation whenever categories change
+  useEffect(() => {
+    if (loading || categories.length === 0) return;
+    if (cardAnims.length !== categories.length) {
+      cardAnims.length = 0;
+      categories.forEach(() => cardAnims.push(new Animated.Value(0)));
+    } else {
+      cardAnims.forEach(a => a.setValue(0));
+    }
+    setTimeout(() => {
+      Animated.stagger(
+        60,
+        cardAnims.map(a =>
+          Animated.spring(a, { toValue: 1, useNativeDriver: true, tension: 80, friction: 10 })
+        )
+      ).start();
+    }, 50);
+  }, [loading, categories.length]);
 
   const catCounts = allTracks.reduce<Record<string, number>>((acc, t) => {
     acc[t.categoryId] = (acc[t.categoryId] ?? 0) + 1;

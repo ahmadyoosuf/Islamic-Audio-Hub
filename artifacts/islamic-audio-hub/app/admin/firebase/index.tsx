@@ -24,44 +24,6 @@ import {
 } from "@/services/firebase.firestore";
 import { uploadAudio, type UploadProgress } from "@/services/firebase.storage";
 
-// ─── Seed data ────────────────────────────────────────────────────────────────
-
-const SEED_CATEGORIES = [
-  { name: "குர்ஆன் விளக்கம்", nameEn: "Quran Explanation",   icon: "📖", color: "#f0bc42", sortOrder: 1, description: "" },
-  { name: "ஹதீஸ் விளக்கம்",   nameEn: "Hadith Explanation",   icon: "📜", color: "#4ade80", sortOrder: 2, description: "" },
-  { name: "ஈமான் அடிப்படைகள்", nameEn: "Pillars of Iman",     icon: "✨", color: "#60a5fa", sortOrder: 3, description: "நம்பிக்கையின் அடிப்படைகளை அல்லாஹ்வின் 99 பெயர்களுடன் அறிக" },
-  { name: "நபி வரலாறு",       nameEn: "Seerah of the Prophet", icon: "🌙", color: "#f472b6", sortOrder: 4, description: "" },
-  { name: "அன்றாட வழிகாட்டி", nameEn: "Daily Guide",           icon: "☀️", color: "#fb923c", sortOrder: 5, description: "தினமும் படிக்க வேண்டிய துஆக்கள் மற்றும் வழிகாட்டல்" },
-];
-
-const SEED_SUBCATEGORIES: Record<string, { name: string; nameEn: string }[]> = {
-  "குர்ஆன் விளக்கம்": [
-    { name: "அல்-ஃபாத்திஹா",  nameEn: "Al-Fatiha" },
-    { name: "அல்-பகரா",        nameEn: "Al-Baqarah" },
-    { name: "பொது விளக்கம்",   nameEn: "General Tafsir" },
-  ],
-  "ஹதீஸ் விளக்கம்": [
-    { name: "அறுபது ஹதீஸ்",    nameEn: "Forty Hadith" },
-    { name: "புகாரி ஹதீஸ்",    nameEn: "Bukhari Hadith" },
-    { name: "பொது ஹதீஸ்",      nameEn: "General Hadith" },
-  ],
-  "ஈமான் அடிப்படைகள்": [
-    { name: "அல்லாஹ்வின் பெயர்கள்", nameEn: "Names of Allah" },
-    { name: "ஆறு ஈமான்கள்",          nameEn: "Six Pillars of Iman" },
-    { name: "ஐந்து தூண்கள்",         nameEn: "Five Pillars of Islam" },
-  ],
-  "நபி வரலாறு": [
-    { name: "மக்கா வாழ்க்கை",   nameEn: "Life in Makkah" },
-    { name: "மதீனா வாழ்க்கை",   nameEn: "Life in Madinah" },
-    { name: "போர்கள் வரலாறு",   nameEn: "Battles" },
-  ],
-  "அன்றாட வழிகாட்டி": [
-    { name: "காலை துஆக்கள்",    nameEn: "Morning Duas" },
-    { name: "மாலை துஆக்கள்",    nameEn: "Evening Duas" },
-    { name: "பொது வழிகாட்டல்",  nameEn: "General Guide" },
-  ],
-};
-
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
 const C = {
@@ -107,7 +69,6 @@ function CategoryManager() {
   const [cats,    setCats]    = useState<FBCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
-  const [seeding, setSeeding] = useState(false);
   const [form, setForm] = useState({ name: "", nameEn: "", icon: "📖", color: "#f0bc42", description: "" });
   const [editId, setEditId] = useState<string | null>(null);
 
@@ -153,47 +114,8 @@ function CategoryManager() {
     ]);
   }
 
-  async function seedCategories() {
-    Alert.alert(
-      "Seed செய்யவா?",
-      `${SEED_CATEGORIES.length} default பிரிவுகள் Firestore-ல் சேர்க்கப்படும். ஏற்கனவே உள்ளவை தொடரும்.`,
-      [
-        { text: "ரத்து", style: "cancel" },
-        { text: "Seed", onPress: async () => {
-          setSeeding(true);
-          try {
-            for (let i = 0; i < SEED_CATEGORIES.length; i++) {
-              await addCategory({ ...SEED_CATEGORIES[i] });
-            }
-            await load();
-            Alert.alert("✅ வெற்றி", `${SEED_CATEGORIES.length} பிரிவுகள் சேர்க்கப்பட்டன`);
-          } catch (e: any) {
-            Alert.alert("பிழை", e.message);
-          } finally {
-            setSeeding(false);
-          }
-        }},
-      ]
-    );
-  }
-
   return (
     <ScrollView contentContainerStyle={s.mgr} showsVerticalScrollIndicator={false}>
-      {/* Seed button */}
-      <TouchableOpacity
-        style={[s.seedBtn, seeding && { opacity: 0.6 }]}
-        onPress={seedCategories}
-        disabled={seeding}
-      >
-        {seeding ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <>
-            <Ionicons name="cloud-upload-outline" size={16} color="#fff" />
-            <Text style={s.seedBtnTxt}>🌱 Default பிரிவுகளை Seed செய்</Text>
-          </>
-        )}
-      </TouchableOpacity>
 
       {/* Add / Edit form */}
       <View style={s.formCard}>
@@ -222,7 +144,7 @@ function CategoryManager() {
       {loading ? (
         <ActivityIndicator color={C.green} style={{ marginTop: 20 }} />
       ) : cats.length === 0 ? (
-        <Text style={s.emptyTxt}>இன்னும் பிரிவுகள் இல்லை. Seed செய்யுங்கள்.</Text>
+        <Text style={s.emptyTxt}>இன்னும் பிரிவுகள் இல்லை. மேலே படிவம் பயன்படுத்தி சேர்க்கவும்.</Text>
       ) : (
         cats.map(cat => (
           <View key={cat.id} style={s.listRow}>
@@ -253,7 +175,6 @@ function SubcategoryManager() {
   const [subs,    setSubs]    = useState<FBSubcategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
-  const [seeding, setSeeding] = useState(false);
   const [form, setForm] = useState({ categoryId: "", name: "", nameEn: "" });
   const [editId, setEditId] = useState<string | null>(null);
 
@@ -301,63 +222,10 @@ function SubcategoryManager() {
     ]);
   }
 
-  async function seedSubcategories() {
-    if (cats.length === 0) {
-      Alert.alert("முதலில் பிரிவுகள் Seed செய்யுங்கள்", "Categories tab-ல் Seed செய்த பிறகு வாருங்கள்");
-      return;
-    }
-    Alert.alert(
-      "Seed செய்யவா?",
-      "ஒவ்வொரு பிரிவிற்கும் default உப-பிரிவுகள் சேர்க்கப்படும்.",
-      [
-        { text: "ரத்து", style: "cancel" },
-        { text: "Seed", onPress: async () => {
-          setSeeding(true);
-          let added = 0;
-          try {
-            for (const cat of cats) {
-              const seedSubs = SEED_SUBCATEGORIES[cat.name] ?? [{ name: cat.name, nameEn: cat.nameEn }];
-              for (let i = 0; i < seedSubs.length; i++) {
-                await addSubCategory({
-                  categoryId: cat.id,
-                  name:      seedSubs[i].name,
-                  nameEn:    seedSubs[i].nameEn,
-                  sortOrder: i + 1,
-                });
-                added++;
-              }
-            }
-            await load();
-            Alert.alert("✅ வெற்றி", `${added} உப-பிரிவுகள் சேர்க்கப்பட்டன`);
-          } catch (e: any) {
-            Alert.alert("பிழை", e.message);
-          } finally {
-            setSeeding(false);
-          }
-        }},
-      ]
-    );
-  }
-
   const catName = (id: string) => cats.find(c => c.id === id)?.name ?? id;
 
   return (
     <ScrollView contentContainerStyle={s.mgr} showsVerticalScrollIndicator={false}>
-      {/* Seed */}
-      <TouchableOpacity
-        style={[s.seedBtn, seeding && { opacity: 0.6 }]}
-        onPress={seedSubcategories}
-        disabled={seeding}
-      >
-        {seeding ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <>
-            <Ionicons name="git-branch-outline" size={16} color="#fff" />
-            <Text style={s.seedBtnTxt}>🌱 Default உப-பிரிவுகளை Seed செய்</Text>
-          </>
-        )}
-      </TouchableOpacity>
 
       {/* Form */}
       <View style={s.formCard}>
@@ -400,7 +268,7 @@ function SubcategoryManager() {
       {loading ? (
         <ActivityIndicator color={C.green} style={{ marginTop: 20 }} />
       ) : subs.length === 0 ? (
-        <Text style={s.emptyTxt}>இன்னும் உப-பிரிவுகள் இல்லை. Seed செய்யுங்கள்.</Text>
+        <Text style={s.emptyTxt}>இன்னும் உப-பிரிவுகள் இல்லை. மேலே படிவம் பயன்படுத்தி சேர்க்கவும்.</Text>
       ) : (
         subs.map(sub => (
           <View key={sub.id} style={s.listRow}>
@@ -703,9 +571,6 @@ const s = StyleSheet.create({
   tabTxt:      { fontSize: 11, color: C.sub, fontWeight: "500" },
 
   mgr:         { padding: 16 },
-
-  seedBtn:     { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: C.green, borderRadius: 12, paddingVertical: 12, marginBottom: 16 },
-  seedBtnTxt:  { color: "#fff", fontWeight: "700", fontSize: 14 },
 
   formCard:    { backgroundColor: "#fff", borderRadius: 16, padding: 16, borderWidth: 1, borderColor: C.border, marginBottom: 20 },
   formTitle:   { fontSize: 15, fontWeight: "800", color: C.txt, marginBottom: 14 },

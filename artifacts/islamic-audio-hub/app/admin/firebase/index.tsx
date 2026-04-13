@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,7 +23,7 @@ import {
   type FBSubcategory,
   type FBCard,
 } from "@/services/firebase.firestore";
-import { uploadAudio, type UploadProgress } from "@/services/firebase.storage";
+import { uploadAudio, pickAudioFileWeb, type UploadProgress } from "@/services/firebase.storage";
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 
@@ -322,22 +323,42 @@ function CardManager() {
 
   async function pickAndUploadAudio() {
     try {
-      const result = await DocumentPicker.getDocumentAsync({ type: "audio/*", copyToCacheDirectory: true });
-      if (result.canceled || !result.assets?.[0]) return;
-      const asset = result.assets[0];
+      let source: string | File;
+      let name: string;
+
+      if (Platform.OS === "web") {
+        // ── Web: use native <input type="file"> ──────────────────────────────
+        // expo-document-picker on web returns an object URL that XHR cannot
+        // reliably read. The browser's File object IS already a Blob — no
+        // conversion needed, and the user sees the OS file dialog they expect.
+        const file = await pickAudioFileWeb();
+        if (!file) return;
+        if (file.size === 0) {
+          Alert.alert("பிழை", `"${file.name}" கோப்பு காலியாக உள்ளது`);
+          return;
+        }
+        source = file;
+        name   = file.name;
+      } else {
+        // ── Native (iOS / Android): expo-document-picker ─────────────────────
+        const result = await DocumentPicker.getDocumentAsync({ type: "audio/*", copyToCacheDirectory: true });
+        if (result.canceled || !result.assets?.[0]) return;
+        const asset = result.assets[0];
+        source = asset.uri;
+        name   = asset.name ?? "audio.mp3";
+      }
 
       setUploading(true);
       setUploadPhase("reading");
 
-      const filename = `${Date.now()}_${asset.name ?? "audio.mp3"}`;
+      const filename = `${Date.now()}_${name}`;
 
-      const url = await uploadAudio(asset.uri, filename, (p: UploadProgress) => {
-        // 0% = blob read phase; 100% = upload complete
+      const url = await uploadAudio(source, filename, (p: UploadProgress) => {
         if (p.percent > 0) setUploadPhase("uploading");
       });
 
       setForm(f => ({ ...f, audioUrl: url }));
-      Alert.alert("✅ பதிவேற்றம் வெற்றி", "ஒலி கோப்பு Firebase Storage-ல் சேமிக்கப்பட்டது");
+      Alert.alert("✅ பதிவேற்றம் வெற்றி", `"${name}" Firebase Storage-ல் சேமிக்கப்பட்டது`);
     } catch (e: any) {
       Alert.alert("பிழை", e.message ?? "பதிவேற்றம் தோல்வி");
     } finally {

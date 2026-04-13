@@ -13,9 +13,10 @@ export interface UploadProgress {
   percent:          number;
 }
 
-// ─── URI → Blob (XHR method) ──────────────────────────────────────────────────
-// fetch() silently fails on local file:// and content:// URIs in React Native.
-// XMLHttpRequest with responseType="blob" is the only reliable approach.
+// ─── URI → Blob via XHR (native only) ────────────────────────────────────────
+// On React Native, fetch() silently returns an empty blob for local file:// and
+// content:// URIs. XMLHttpRequest with responseType="blob" is the only reliable
+// method to read a local device file into memory.
 
 function uriBlobXHR(uri: string): Promise<Blob> {
   return new Promise((resolve, reject) => {
@@ -39,48 +40,85 @@ function uriBlobXHR(uri: string): Promise<Blob> {
 function mimeFromFilename(name: string): string {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   const map: Record<string, string> = {
-    mp3: "audio/mpeg",
-    m4a: "audio/mp4",
-    aac: "audio/aac",
-    ogg: "audio/ogg",
-    wav: "audio/wav",
+    mp3:  "audio/mpeg",
+    m4a:  "audio/mp4",
+    aac:  "audio/aac",
+    ogg:  "audio/ogg",
+    wav:  "audio/wav",
     flac: "audio/flac",
     webm: "audio/webm",
   };
   return map[ext] ?? "audio/mpeg";
 }
 
+// ─── Pick audio file on web ───────────────────────────────────────────────────
+// On web, expo-document-picker returns an object URL that isn't always readable.
+// A hidden <input type="file"> gives us the actual File object (already a Blob).
+
+export function pickAudioFileWeb(): Promise<File | null> {
+  return new Promise(resolve => {
+    const input = document.createElement("input");
+    input.type    = "file";
+    input.accept  = "audio/*";
+    input.style.display = "none";
+
+    input.onchange = (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0] ?? null;
+      document.body.removeChild(input);
+      resolve(file);
+    };
+
+    // If user closes dialog without picking
+    input.addEventListener("cancel", () => {
+      document.body.removeChild(input);
+      resolve(null);
+    });
+
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
 // ─── uploadAudio ──────────────────────────────────────────────────────────────
-// Uses uploadBytes (single-request) instead of uploadBytesResumable.
-// uploadBytesResumable requires a multi-step resumable protocol that commonly
-// fails in React Native with "unknown" errors due to CORS on the resumable
-// upload endpoint. uploadBytes does one PUT request and is far more reliable.
+// Accepts either:
+//   • source: string  — a local file URI from expo-document-picker (native)
+//   • source: Blob    — a File object from <input type="file"> (web)
+//
+// Uses uploadBytes (single PUT request) instead of uploadBytesResumable.
+// uploadBytesResumable's resumable protocol commonly fails in React Native
+// with "unknown" errors due to CORS on the resumable upload endpoint.
 
 export async function uploadAudio(
-  uri:        string,
-  filename:   string,
+  source:      string | Blob,
+  filename:    string,
   onProgress?: (p: UploadProgress) => void,
 ): Promise<string> {
-  // Step 1 — read local file into a blob via XHR
+
+  // ── Step 1: get a Blob ───────────────────────────────────────────────────
   let blob: Blob;
-  try {
-    blob = await uriBlobXHR(uri);
-  } catch (e: any) {
-    console.error("[Storage] uriBlobXHR failed:", e?.message ?? e);
-    throw new Error(`கோப்பு படிக்க முடியவில்லை: ${e?.message ?? "XHR error"}`);
+
+  if (typeof source === "string") {
+    // Native: local URI → blob via XHR
+    try {
+      blob = await uriBlobXHR(source);
+    } catch (e: any) {
+      console.error("[Storage] uriBlobXHR failed:", e?.message ?? e);
+      throw new Error(`கோப்பு படிக்க முடியவில்லை: ${e?.message ?? "XHR error"}`);
+    }
+  } else {
+    // Web: File/Blob already in memory — no conversion needed
+    blob = source;
   }
 
   if (!blob || blob.size === 0) {
     throw new Error("கோப்பு காலியாக உள்ளது (0 bytes) — வேறு கோப்பை தேர்ந்தெடுக்கவும்");
   }
 
-  console.log(`[Storage] blob ready — size: ${blob.size} bytes, uri: ${uri}`);
-
-  // Report 0% immediately so UI shows something
+  console.log(`[Storage] blob ready — size: ${blob.size} bytes, name: ${filename}`);
   onProgress?.({ bytesTransferred: 0, totalBytes: blob.size, percent: 0 });
 
-  // Step 2 — upload to Firebase Storage (single-request uploadBytes)
-  const mime = mimeFromFilename(filename);
+  // ── Step 2: upload ───────────────────────────────────────────────────────
+  const mime = (blob as File).type || mimeFromFilename(filename);
   const storageRef: StorageReference = ref(storage, `audio/${filename}`);
 
   let snapshot;
@@ -91,11 +129,10 @@ export async function uploadAudio(
     throw new Error(`Firebase Storage upload பிழை: ${e?.message ?? e?.code ?? "unknown"}`);
   }
 
-  // Report 100% on success
   onProgress?.({ bytesTransferred: blob.size, totalBytes: blob.size, percent: 100 });
   console.log(`[Storage] upload complete — path: ${snapshot.ref.fullPath}`);
 
-  // Step 3 — get the public download URL
+  // ── Step 3: get download URL ─────────────────────────────────────────────
   let url: string;
   try {
     url = await getDownloadURL(snapshot.ref);
@@ -104,12 +141,11 @@ export async function uploadAudio(
     throw new Error(`Download URL பெற முடியவில்லை: ${e?.message ?? e?.code}`);
   }
 
-  console.log(`[Storage] download URL: ${url.substring(0, 80)}...`);
+  console.log(`[Storage] download URL obtained ✓`);
   return url;
 }
 
 // ─── deleteAudio ──────────────────────────────────────────────────────────────
-// Accepts a full https:// download URL or a gs:// storage path.
 
 export async function deleteAudio(downloadUrl: string): Promise<void> {
   try {
@@ -122,7 +158,6 @@ export async function deleteAudio(downloadUrl: string): Promise<void> {
 }
 
 // ─── getAudioUrl ──────────────────────────────────────────────────────────────
-// Get the download URL for a given storage path, e.g. "audio/my-file.mp3"
 
 export async function getAudioUrl(path: string): Promise<string> {
   const fileRef = ref(storage, path);

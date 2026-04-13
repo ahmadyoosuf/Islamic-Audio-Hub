@@ -96,6 +96,7 @@ async function _doInit(): Promise<void> {
     const flag = await AsyncStorage.getItem(DB_INIT_KEY);
     if (flag === '1') {
       await _ensureCategorySeeded();
+      await _migrateQuizData();
       return;
     }
 
@@ -180,6 +181,48 @@ async function _ensureCategorySeeded(): Promise<void> {
     }
   } catch (err) {
     console.warn('[unifiedStorage] _ensureCategorySeeded error:', err);
+  }
+}
+
+async function _migrateQuizData(): Promise<void> {
+  try {
+    const { QUIZ_QUESTIONS } = require('./categories');
+    const raw = await AsyncStorage.getItem(DB_QUIZZES_KEY);
+    const existing: UnifiedQuiz[] = safeParseJSON<UnifiedQuiz[]>(raw, []);
+    const newItems: UnifiedQuiz[] = [];
+    let idx = Date.now();
+
+    for (const [trackId, qs] of Object.entries(QUIZ_QUESTIONS as Record<string, any[]>)) {
+      const forTrack = existing.filter((q) => q.trackId === trackId);
+      for (let i = forTrack.length; i < qs.length; i++) {
+        const q = (qs as any[])[i];
+        newItems.push({
+          id: `bq_${trackId}_m_${idx++}`,
+          trackId,
+          categoryId: trackId.split('-')[0],
+          question: q.question,
+          options: q.options,
+          correctIndex: q.correctIndex,
+          addedAt: Date.now(),
+        });
+      }
+    }
+
+    if (newItems.length > 0) {
+      const fresh = safeParseJSON<UnifiedQuiz[]>(
+        await AsyncStorage.getItem(DB_QUIZZES_KEY),
+        [],
+      );
+      await AsyncStorage.setItem(DB_QUIZZES_KEY, JSON.stringify([...fresh, ...newItems]));
+      const tracksRaw = await AsyncStorage.getItem(DB_TRACKS_KEY);
+      const tracks: UnifiedTrack[] = safeParseJSON<UnifiedTrack[]>(tracksRaw, []);
+      const updatedTracks = tracks.map((t) =>
+        QUIZ_QUESTIONS[t.id]?.length ? { ...t, hasQuiz: true } : t,
+      );
+      await AsyncStorage.setItem(DB_TRACKS_KEY, JSON.stringify(updatedTracks));
+    }
+  } catch (err) {
+    console.warn('[unifiedStorage] _migrateQuizData error:', err);
   }
 }
 

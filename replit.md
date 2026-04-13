@@ -25,7 +25,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Features**:
   - 5 categories: Quran Tafsir, Hadith, Iman, Seerah, Daily Guide (106 tracks)
   - Global audio player (mini + full modal) with playback speed control (0.5x–2x)
-  - Quiz system (Tamil MCQ with 3 options using Tamil letters அ/ஆ/இ)
+  - **Quiz system**: 3-level progressive quiz (Level 1: 5Q, Level 2: 10Q, Level 3: 15Q) — levels unlock sequentially, shuffled questions, A/B/C/D options, Web Audio API tones + haptics, score & streak tracking, progress saved per-track-per-level in AsyncStorage key `quiz_level_progress_v1`
   - Favorites system (AsyncStorage)
   - Playback progress tracking (AsyncStorage)
   - Bottom navigation: Home, Favorites, Profile, About

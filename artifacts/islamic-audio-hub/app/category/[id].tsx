@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef } from "react";
 import {
   Animated,
   Dimensions,
@@ -14,7 +14,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import AudioPlayer from "@/components/AudioPlayer";
 import { useApp } from "@/context/AppContext";
-import { getCategoryById, type StoredCategory } from "@/data/unifiedStorage";
 import {
   useCategory,
   useSubcategories,
@@ -179,16 +178,9 @@ export default function CategoryScreen() {
   const router   = useRouter();
   const { isDarkMode: isDark } = useApp();
 
-  // ── 1. Fetch category (Firebase first, seeded fallback) ──────────────────
+  // ── 1. Fetch category from Firebase only ─────────────────────────────────
   const { category: fbCat, loading: fbCatLoading } = useCategory(id ?? "");
-  const [seedCat, setSeedCat] = useState<StoredCategory | null>(null);
-
-  useEffect(() => {
-    getCategoryById(id ?? "").then(setSeedCat);
-  }, [id]);
-
-  // Prefer Firebase; fall back to local seeded category
-  const catData = fbCat ?? seedCat;
+  const catData = fbCat;
 
   // ── 2. Fetch subcategories for this category (real-time) ─────────────────
   const { subcategories, loading: subsLoading } = useSubcategories(id ?? "");

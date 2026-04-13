@@ -16,12 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AudioPlayer from "@/components/AudioPlayer";
 import { useAudio } from "@/context/AudioContext";
 import { useApp } from "@/context/AppContext";
-import {
-  getAllTracks,
-  getAllCategories,
-  type UnifiedTrack,
-  type StoredCategory,
-} from "@/data/unifiedStorage";
+import type { StoredCategory, UnifiedTrack } from "@/data/unifiedStorage";
 import { useCategories, useAllCards } from "@/hooks/useFirebaseData";
 import type { FBCategory, FBCard } from "@/services/firebase.firestore";
 
@@ -199,14 +194,9 @@ export default function HomeScreen() {
   const router = useRouter();
   const { isDarkMode: isDark } = useApp();
 
-  // ── Firebase real-time data ──────────────────────────────────────────────
+  // ── Firebase real-time data (sole source of truth) ──────────────────────
   const { categories: fbCats, loading: fbCatsLoading, error: fbCatError } = useCategories();
-  const { cards: fbCards, loading: fbCardsLoading }    = useAllCards();
-
-  // ── Seeded (AsyncStorage) fallback data ──────────────────────────────────
-  const [seedTracks, setSeedTracks]   = useState<UnifiedTrack[]>([]);
-  const [seedCats,   setSeedCats]     = useState<StoredCategory[]>([]);
-  const [seedLoaded, setSeedLoaded]   = useState(false);
+  const { cards: fbCards } = useAllCards();
 
   const [search,   setSearch]   = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -214,23 +204,10 @@ export default function HomeScreen() {
   // Staggered card animation refs
   const cardAnims = useRef<Animated.Value[]>([]).current;
 
-  // Load seeded data once on mount (for fallback when Firebase is empty)
-  useEffect(() => {
-    Promise.all([getAllTracks(), getAllCategories()]).then(([tracks, cats]) => {
-      setSeedTracks(tracks);
-      setSeedCats(cats);
-      setSeedLoaded(true);
-    });
-  }, []);
-
-  // Show seeded data as soon as it's ready; overlay Firebase data when it arrives
-  const loading    = !seedLoaded;
-  const categories: StoredCategory[] = fbCats.length > 0
-    ? fbCats.map(fbCatToStored)
-    : seedCats;
-  const allTracks: UnifiedTrack[] = fbCards.length > 0
-    ? fbCards.map(fbCardToTrack)
-    : seedTracks;
+  // Firebase is the ONLY data source — no local seeded fallback
+  const loading     = fbCatsLoading;
+  const categories: StoredCategory[] = fbCats.map(fbCatToStored);
+  const allTracks: UnifiedTrack[]    = fbCards.map(fbCardToTrack);
 
   // Stagger animation whenever categories change
   useEffect(() => {
@@ -382,11 +359,21 @@ export default function HomeScreen() {
           <View style={styles.grid}>
             {[0, 1, 2, 3].map(i => <SkeletonCard key={i} isDark={isDark} />)}
           </View>
-        ) : filteredCats.length === 0 ? (
+        ) : filteredCats.length === 0 && search ? (
           <View style={styles.emptyBox}>
             <Text style={styles.emptyIcon}>🔍</Text>
             <Text style={[styles.emptyTxt, { color: textSub }]}>
               "{search}" பிரிவு கிடைக்கவில்லை
+            </Text>
+          </View>
+        ) : filteredCats.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyIcon}>🕌</Text>
+            <Text style={[styles.emptyTxt, { color: textSub, fontWeight: "700" }]}>
+              Firebase-ல் பிரிவுகள் இல்லை
+            </Text>
+            <Text style={[styles.emptyTxt, { color: textSub, fontSize: 12, marginTop: 4 }]}>
+              Admin → Firebase CMS → Categories tab-ல்{"\n"}பிரிவுகளை சேர்க்கவும்
             </Text>
           </View>
         ) : (

@@ -1,12 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const DB_TRACKS_KEY   = 'db_tracks_v4';
-const DB_QUIZZES_KEY  = 'db_quizzes_v4';
-const DB_INIT_KEY     = 'db_initialized_v4';
-const DB_CATS_KEY     = 'db_categories_v1';
-const DB_SUBS_KEY     = 'db_subcategories_v1';
+const DB_TRACKS_KEY  = 'db_tracks_v4';
+const DB_QUIZZES_KEY = 'db_quizzes_v4';
+const DB_CATS_KEY    = 'db_categories_v1';
+const DB_SUBS_KEY    = 'db_subcategories_v1';
 
-// ─── INTERFACES ────────────────────────────────────────────────────────────
+// ─── INTERFACES ─────────────────────────────────────────────────────────────
 
 export interface StoredCategory {
   id: string;
@@ -56,17 +55,7 @@ export interface UnifiedQuiz {
   addedAt: number;
 }
 
-// ─── BUILT-IN CATEGORIES ───────────────────────────────────────────────────
-
-const BUILT_IN_CATS: StoredCategory[] = [
-  { id: 'quran',  name: 'குர்ஆன் விளக்கம்',   icon: '📖', color: '#f0bc42', sortOrder: 1, createdAt: 0 },
-  { id: 'hadith', name: 'ஹதீஸ் விளக்கம்',     icon: '📜', color: '#4ade80', sortOrder: 2, createdAt: 0 },
-  { id: 'iman',   name: 'ஈமான் அடிப்படைகள்', icon: '✨', color: '#60a5fa', description: 'நம்பிக்கையின் அடிப்படைகளை அல்லாஹ்வின் 99 பெயர்களுடன் அறிக', sortOrder: 3, createdAt: 0 },
-  { id: 'seerah', name: 'நபி வரலாறு',         icon: '🌙', color: '#f472b6', sortOrder: 4, createdAt: 0 },
-  { id: 'daily',  name: 'அன்றாட வழிகாட்டி', icon: '☀️', color: '#fb923c', description: 'தினமும் படிக்க வேண்டிய துஆக்கள் மற்றும் வழிகாட்டல்', sortOrder: 5, createdAt: 0 },
-];
-
-// ─── SAFE JSON PARSE ───────────────────────────────────────────────────────
+// ─── SAFE JSON PARSE ─────────────────────────────────────────────────────────
 
 function safeParseJSON<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback;
@@ -77,160 +66,12 @@ function safeParseJSON<T>(raw: string | null, fallback: T): T {
   }
 }
 
-// ─── INIT ──────────────────────────────────────────────────────────────────
-
-let _initPromise: Promise<void> | null = null;
-
-export async function initDB(): Promise<void> {
-  if (_initPromise) return _initPromise;
-  _initPromise = _doInit().catch(err => {
-    // Reset so next call can retry instead of always returning rejected promise
-    _initPromise = null;
-    console.warn('[unifiedStorage] initDB failed, will retry on next call:', err);
-  });
-  return _initPromise;
-}
-
-async function _doInit(): Promise<void> {
-  try {
-    const flag = await AsyncStorage.getItem(DB_INIT_KEY);
-    if (flag === '1') {
-      await _ensureCategorySeeded();
-      await _migrateQuizData();
-      return;
-    }
-
-    const { TRACKS_BY_CATEGORY, QUIZ_QUESTIONS } = require('./categories');
-
-    const allTracks: UnifiedTrack[] = Object.values(TRACKS_BY_CATEGORY as Record<string, any[]>)
-      .flat()
-      .map((t: any) => {
-        const hasQ = !!(QUIZ_QUESTIONS[t.id]?.length);
-        return {
-          id: t.id,
-          title: t.title,
-          categoryId: t.categoryId,
-          categoryName: t.categoryName,
-          duration: t.duration ?? 0,
-          audioUrl: t.audioUrl ?? '',
-          viewCount: t.viewCount ?? 0,
-          isPremium: t.isPremium ?? false,
-          sortOrder: t.sortOrder ?? 0,
-          prizeEnabled: t.prizeEnabled ?? false,
-          hasQuiz: hasQ,
-          description: '',
-          fileName: undefined,
-          uploadedAt: Date.now(),
-          isBuiltIn: true,
-        };
-      });
-
-    const allQuizzes: UnifiedQuiz[] = [];
-    let idx = 0;
-    for (const [trackId, qs] of Object.entries(QUIZ_QUESTIONS as Record<string, any[]>)) {
-      for (const q of qs) {
-        allQuizzes.push({
-          id: `bq_${trackId}_${idx++}`,
-          trackId,
-          categoryId: trackId.split('-')[0],
-          question: q.question,
-          options: q.options,
-          correctIndex: q.correctIndex,
-          addedAt: Date.now(),
-        });
-      }
-    }
-
-    const existingTracksRaw = await AsyncStorage.getItem('custom_tracks');
-    const existingTracks: any[] = safeParseJSON(existingTracksRaw, []);
-    const existingQuizzesRaw = await AsyncStorage.getItem('custom_quizzes');
-    const existingQuizzes: any[] = safeParseJSON(existingQuizzesRaw, []);
-
-    const migratedCustomTracks: UnifiedTrack[] = existingTracks.map((t: any) => ({
-      id: t.id, title: t.title, categoryId: t.categoryId, categoryName: t.categoryName,
-      duration: t.duration ?? 0, audioUrl: t.audioUri ?? t.audioUrl ?? '',
-      viewCount: 0, isPremium: false, sortOrder: 9999, hasQuiz: false,
-      description: t.description ?? '', fileName: t.fileName,
-      uploadedAt: t.uploadedAt ?? Date.now(), isBuiltIn: false,
-    }));
-
-    const migratedCustomQuizzes: UnifiedQuiz[] = existingQuizzes.map((q: any) => ({
-      id: q.id, trackId: q.trackId ?? '', categoryId: q.categoryId ?? '',
-      question: q.question, options: q.options, correctIndex: q.correctIndex,
-      addedAt: q.addedAt ?? Date.now(),
-    }));
-
-    await AsyncStorage.multiSet([
-      [DB_TRACKS_KEY, JSON.stringify([...allTracks, ...migratedCustomTracks])],
-      [DB_QUIZZES_KEY, JSON.stringify([...allQuizzes, ...migratedCustomQuizzes])],
-      [DB_CATS_KEY, JSON.stringify(BUILT_IN_CATS)],
-      [DB_INIT_KEY, '1'],
-    ]);
-  } catch (err) {
-    console.error('[unifiedStorage] _doInit error:', err);
-    throw err;
-  }
-}
-
-async function _ensureCategorySeeded(): Promise<void> {
-  try {
-    const raw = await AsyncStorage.getItem(DB_CATS_KEY);
-    const cats = safeParseJSON<StoredCategory[]>(raw, []);
-    if (cats.length === 0) {
-      await AsyncStorage.setItem(DB_CATS_KEY, JSON.stringify(BUILT_IN_CATS));
-    }
-  } catch (err) {
-    console.warn('[unifiedStorage] _ensureCategorySeeded error:', err);
-  }
-}
-
-async function _migrateQuizData(): Promise<void> {
-  try {
-    const { QUIZ_QUESTIONS } = require('./categories');
-    const raw = await AsyncStorage.getItem(DB_QUIZZES_KEY);
-    const existing: UnifiedQuiz[] = safeParseJSON<UnifiedQuiz[]>(raw, []);
-    const newItems: UnifiedQuiz[] = [];
-    let idx = Date.now();
-
-    for (const [trackId, qs] of Object.entries(QUIZ_QUESTIONS as Record<string, any[]>)) {
-      const forTrack = existing.filter((q) => q.trackId === trackId);
-      for (let i = forTrack.length; i < qs.length; i++) {
-        const q = (qs as any[])[i];
-        newItems.push({
-          id: `bq_${trackId}_m_${idx++}`,
-          trackId,
-          categoryId: trackId.split('-')[0],
-          question: q.question,
-          options: q.options,
-          correctIndex: q.correctIndex,
-          addedAt: Date.now(),
-        });
-      }
-    }
-
-    if (newItems.length > 0) {
-      const fresh = safeParseJSON<UnifiedQuiz[]>(
-        await AsyncStorage.getItem(DB_QUIZZES_KEY),
-        [],
-      );
-      await AsyncStorage.setItem(DB_QUIZZES_KEY, JSON.stringify([...fresh, ...newItems]));
-      const tracksRaw = await AsyncStorage.getItem(DB_TRACKS_KEY);
-      const tracks: UnifiedTrack[] = safeParseJSON<UnifiedTrack[]>(tracksRaw, []);
-      const updatedTracks = tracks.map((t) =>
-        QUIZ_QUESTIONS[t.id]?.length ? { ...t, hasQuiz: true } : t,
-      );
-      await AsyncStorage.setItem(DB_TRACKS_KEY, JSON.stringify(updatedTracks));
-    }
-  } catch (err) {
-    console.warn('[unifiedStorage] _migrateQuizData error:', err);
-  }
-}
-
-// ─── TRACKS ────────────────────────────────────────────────────────────────
+// ─── TRACKS ──────────────────────────────────────────────────────────────────
+// NOTE: Local track storage is kept for quiz progress and upload-based tracks.
+// Categories and cards are now 100% Firebase-only.
 
 export async function getAllTracks(): Promise<UnifiedTrack[]> {
   try {
-    await initDB();
     const raw = await AsyncStorage.getItem(DB_TRACKS_KEY);
     return safeParseJSON<UnifiedTrack[]>(raw, []);
   } catch {
@@ -314,11 +155,10 @@ export async function getCategoryTrackCounts(): Promise<Record<string, number>> 
   }
 }
 
-// ─── QUIZZES ───────────────────────────────────────────────────────────────
+// ─── QUIZZES ─────────────────────────────────────────────────────────────────
 
 export async function getQuizzesByTrack(trackId: string): Promise<UnifiedQuiz[]> {
   try {
-    await initDB();
     const raw = await AsyncStorage.getItem(DB_QUIZZES_KEY);
     const all: UnifiedQuiz[] = safeParseJSON(raw, []);
     return all.filter(q => q.trackId === trackId);
@@ -329,7 +169,6 @@ export async function getQuizzesByTrack(trackId: string): Promise<UnifiedQuiz[]>
 
 export async function getAllQuizzes(): Promise<UnifiedQuiz[]> {
   try {
-    await initDB();
     const raw = await AsyncStorage.getItem(DB_QUIZZES_KEY);
     return safeParseJSON<UnifiedQuiz[]>(raw, []);
   } catch {
@@ -372,17 +211,17 @@ export async function deleteQuiz(id: string): Promise<void> {
   }
 }
 
-// ─── CATEGORIES ────────────────────────────────────────────────────────────
+// ─── CATEGORIES (local-only CRUD — Firebase is primary source) ───────────────
+// These functions manage a local cache of categories for offline/admin use.
+// getAllCategories returns [] if nothing is stored locally — NO built-in seeding.
 
 export async function getAllCategories(): Promise<StoredCategory[]> {
   try {
-    await initDB();
     const raw = await AsyncStorage.getItem(DB_CATS_KEY);
     const cats = safeParseJSON<StoredCategory[]>(raw, []);
-    if (cats.length === 0) return BUILT_IN_CATS;
     return cats.sort((a, b) => a.sortOrder - b.sortOrder);
   } catch {
-    return BUILT_IN_CATS;
+    return [];
   }
 }
 
@@ -424,19 +263,17 @@ export async function deleteCategory(id: string): Promise<void> {
   try {
     const all = await getAllCategories();
     await AsyncStorage.setItem(DB_CATS_KEY, JSON.stringify(all.filter(c => c.id !== id)));
-    // cascade: remove all tracks in this category
     const tracks = await getAllTracks();
     await AsyncStorage.setItem(DB_TRACKS_KEY, JSON.stringify(tracks.filter(t => t.categoryId !== id)));
-    // cascade: remove subcategories
-    const subs = await getSubcategoriesByCategory(id);
-    const allSubs = safeParseJSON<StoredSubcategory[]>(await AsyncStorage.getItem(DB_SUBS_KEY), []);
+    const raw = await AsyncStorage.getItem(DB_SUBS_KEY);
+    const allSubs = safeParseJSON<StoredSubcategory[]>(raw, []);
     await AsyncStorage.setItem(DB_SUBS_KEY, JSON.stringify(allSubs.filter(s => s.categoryId !== id)));
   } catch (err) {
     console.warn('[unifiedStorage] deleteCategory error:', err);
   }
 }
 
-// ─── SUBCATEGORIES ─────────────────────────────────────────────────────────
+// ─── SUBCATEGORIES ───────────────────────────────────────────────────────────
 
 export async function getSubcategoriesByCategory(categoryId: string): Promise<StoredSubcategory[]> {
   try {
@@ -480,7 +317,6 @@ export async function deleteSubcategory(id: string): Promise<void> {
     const raw = await AsyncStorage.getItem(DB_SUBS_KEY);
     const all = safeParseJSON<StoredSubcategory[]>(raw, []);
     await AsyncStorage.setItem(DB_SUBS_KEY, JSON.stringify(all.filter(s => s.id !== id)));
-    // unassign tracks that were in this subcategory
     const tracks = await getAllTracks();
     const updated = tracks.map(t => t.subcategoryId === id ? { ...t, subcategoryId: undefined } : t);
     await AsyncStorage.setItem(DB_TRACKS_KEY, JSON.stringify(updated));
@@ -490,6 +326,5 @@ export async function deleteSubcategory(id: string): Promise<void> {
 }
 
 export async function resetDB(): Promise<void> {
-  _initPromise = null;
-  await AsyncStorage.multiRemove([DB_TRACKS_KEY, DB_QUIZZES_KEY, DB_INIT_KEY, DB_CATS_KEY, DB_SUBS_KEY]);
+  await AsyncStorage.multiRemove([DB_TRACKS_KEY, DB_QUIZZES_KEY, DB_CATS_KEY, DB_SUBS_KEY]);
 }

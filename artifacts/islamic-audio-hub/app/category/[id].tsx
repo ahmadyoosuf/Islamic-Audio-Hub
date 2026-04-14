@@ -1,5 +1,8 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import {
+  BookOpen, Search, FileText, GraduationCap, Star, User,
+  Sun, HandMetal, Music, Layers, Headphones, ArrowRight,
+} from "lucide-react-native";
 import React, { useEffect, useRef } from "react";
 import {
   Animated,
@@ -43,23 +46,32 @@ const C = {
   bdr:      "#1e2e24",
 };
 
-// Icon map for subcategory icons
-const ICON_MAP: Record<string, string> = {
-  quran: "book", surah: "book", fatiha: "book",
-  tafseer: "search", tafsir: "search", explanation: "search",
-  hadith: "document-text", hadis: "document-text",
-  lesson: "school", learn: "school", iman: "star",
-  faith: "star", seerah: "person", nabi: "person",
-  daily: "sunny", dua: "hand-left", prayer: "hand-left",
-  default: "musical-notes",
-};
+// ─── Subcategory icon resolver ────────────────────────────────────────────────
 
-function resolveIcon(nameEn: string, name: string): string {
+type LucideProps = { size: number; color: string; strokeWidth?: number };
+
+function SubcategoryIcon({ nameEn, name, size, color }: { nameEn: string; name: string } & LucideProps) {
   const hay = (nameEn + " " + name).toLowerCase();
-  for (const [key, icon] of Object.entries(ICON_MAP)) {
-    if (key !== "default" && hay.includes(key)) return icon;
-  }
-  return ICON_MAP.default;
+  const sw  = 2;
+  if (hay.match(/quran|surah|fatiha|ikhlas|falaq|nas|lahab|fath|kafirun|kawthar|maun|quraysh/))
+    return <BookOpen size={size} color={color} strokeWidth={sw} />;
+  if (hay.match(/tafseer|tafsir|virivurai|explanation|விரிவுரை/))
+    return <Search size={size} color={color} strokeWidth={sw} />;
+  if (hay.match(/hadith|hadis|ஹதீஸ்/))
+    return <FileText size={size} color={color} strokeWidth={sw} />;
+  if (hay.match(/lesson|learn|class|school/))
+    return <GraduationCap size={size} color={color} strokeWidth={sw} />;
+  if (hay.match(/iman|faith|star|aqeedah/))
+    return <Star size={size} color={color} strokeWidth={sw} />;
+  if (hay.match(/seerah|nabi|prophet|person/))
+    return <User size={size} color={color} strokeWidth={sw} />;
+  if (hay.match(/daily|morning|evening|sun/))
+    return <Sun size={size} color={color} strokeWidth={sw} />;
+  if (hay.match(/dua|prayer|hand/))
+    return <HandMetal size={size} color={color} strokeWidth={sw} />;
+  if (hay.match(/layer|level|sub/))
+    return <Layers size={size} color={color} strokeWidth={sw} />;
+  return <Music size={size} color={color} strokeWidth={sw} />;
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
@@ -99,7 +111,6 @@ function SubCard({
   const textMain = isDark ? C.txtDark : C.txt;
   const textSub  = isDark ? C.subDark : C.sub;
   const iconBg   = isDark ? color + "28" : color + "18";
-  const iconName = resolveIcon(sub.nameEn, sub.name);
 
   return (
     <Animated.View style={{
@@ -121,7 +132,7 @@ function SubCard({
 
           {/* Icon */}
           <View style={[styles.cardIconBox, { backgroundColor: iconBg }]}>
-            <Ionicons name={iconName as any} size={26} color={color} />
+            <SubcategoryIcon nameEn={sub.nameEn} name={sub.name} size={26} color={color} />
           </View>
 
           {/* Tamil title (primary) */}
@@ -139,11 +150,11 @@ function SubCard({
           {/* Footer */}
           <View style={styles.cardBottom}>
             <View style={[styles.countPill, { backgroundColor: color + "18" }]}>
-              <Ionicons name="headset-outline" size={10} color={color} />
+              <Headphones size={10} color={color} strokeWidth={2} />
               <Text style={[styles.countTxt, { color }]}>{cardCount} பாடங்கள்</Text>
             </View>
             <View style={[styles.arrowCircle, { borderColor: color + "55" }]}>
-              <Ionicons name="arrow-forward" size={12} color={color} />
+              <ArrowRight size={12} color={color} strokeWidth={2.5} />
             </View>
           </View>
         </Animated.View>
@@ -159,7 +170,7 @@ function EmptySubcategories({ color, isDark }: { color: string; isDark: boolean 
   return (
     <View style={styles.emptyBox}>
       <View style={[styles.emptyIconBox, { backgroundColor: color + "18" }]}>
-        <Ionicons name="git-branch-outline" size={36} color={color} />
+        <Layers size={36} color={color} strokeWidth={1.5} />
       </View>
       <Text style={[styles.emptyTitle, { color: isDark ? C.txtDark : C.txt }]}>
         உப-பிரிவுகள் இல்லை
@@ -225,7 +236,7 @@ export default function CategoryScreen() {
       <View style={[styles.screen, { backgroundColor: bg }]}>
         <SafeAreaView edges={["top"]} style={{ flex: 1 }}>
           <Pressable onPress={() => router.back()} style={[styles.backBtn, { backgroundColor: C.green + "18" }]}>
-            <Ionicons name="arrow-back" size={18} color={C.green} />
+            <ArrowRight size={18} color={C.green} strokeWidth={2.5} style={{ transform: [{ scaleX: -1 }] }} />
           </Pressable>
           <View style={styles.centered}>
             <Text style={{ fontSize: 44 }}>❓</Text>
@@ -246,7 +257,7 @@ export default function CategoryScreen() {
             onPress={() => router.back()}
             style={[styles.backBtn, { backgroundColor: color + "18", borderColor: color + "44" }]}
           >
-            <Ionicons name="arrow-back" size={18} color={color} />
+            <ArrowRight size={18} color={color} strokeWidth={2.5} style={{ transform: [{ scaleX: -1 }] }} />
           </Pressable>
           <View style={styles.hdrCenter}>
             {catData ? (
@@ -278,14 +289,14 @@ export default function CategoryScreen() {
         {!loading && catData && (
           <View style={[styles.statsRow, { backgroundColor: color + "12", borderBottomColor: color + "22" }]}>
             <View style={styles.statItem}>
-              <Ionicons name="git-branch-outline" size={13} color={color} />
+              <Layers size={13} color={color} strokeWidth={2} />
               <Text style={[styles.statTxt, { color }]}>
                 {subcategories.length} உப-பிரிவுகள்
               </Text>
             </View>
             <View style={[styles.statDiv, { backgroundColor: color + "44" }]} />
             <View style={styles.statItem}>
-              <Ionicons name="headset-outline" size={13} color={color} />
+              <Headphones size={13} color={color} strokeWidth={2} />
               <Text style={[styles.statTxt, { color }]}>
                 {catCards.length} பாடங்கள்
               </Text>

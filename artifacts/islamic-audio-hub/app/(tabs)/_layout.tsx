@@ -1,6 +1,6 @@
-import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
+import { Home, Heart, User, Info, Sparkles } from "lucide-react-native";
 import React, { useState } from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 import RequestModal from "@/components/RequestModal";
@@ -55,7 +55,7 @@ export default function TabLayout() {
           options={{
             title: "முகப்பு",
             tabBarIcon: ({ color }) => (
-              <Ionicons name="home" size={22} color={color} />
+              <Home size={22} color={color} strokeWidth={2} />
             ),
           }}
         />
@@ -64,7 +64,7 @@ export default function TabLayout() {
           options={{
             title: "பிடித்தவை",
             tabBarIcon: ({ color }) => (
-              <Ionicons name="heart" size={22} color={color} />
+              <Heart size={22} color={color} strokeWidth={2} />
             ),
           }}
         />
@@ -73,7 +73,7 @@ export default function TabLayout() {
           options={{
             title: "சுயவிவரம்",
             tabBarIcon: ({ color }) => (
-              <Ionicons name="person" size={22} color={color} />
+              <User size={22} color={color} strokeWidth={2} />
             ),
           }}
         />
@@ -82,7 +82,7 @@ export default function TabLayout() {
           options={{
             title: "பற்றி",
             tabBarIcon: ({ color }) => (
-              <Ionicons name="information-circle" size={22} color={color} />
+              <Info size={22} color={color} strokeWidth={2} />
             ),
           }}
         />
@@ -97,7 +97,7 @@ export default function TabLayout() {
           options={{
             title: "கோரிக்கை",
             tabBarIcon: ({ color }) => (
-              <Ionicons name="sparkles" size={22} color={color} />
+              <Sparkles size={22} color={color} strokeWidth={2} />
             ),
           }}
         />

@@ -1,5 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { Play, Pause, HelpCircle, Clock, Volume2, Music, ChevronDown, ArrowLeft } from "lucide-react-native";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Animated,
@@ -88,7 +88,7 @@ function CardRow({
           {/* Index bubble */}
           <View style={[styles.indexBubble, { backgroundColor: isActive ? color : color + "33" }]}>
             {isActive && isPlaying ? (
-              <Ionicons name="volume-high" size={14} color="#fff" />
+              <Volume2 size={14} color="#fff" strokeWidth={2.5} />
             ) : (
               <Text style={[styles.indexNum, { color: isActive ? "#fff" : color }]}>{index}</Text>
             )}
@@ -110,7 +110,7 @@ function CardRow({
             <View style={styles.metaRow}>
               {card.duration > 0 && (
                 <>
-                  <Ionicons name="time-outline" size={10} color="#777" />
+                  <Clock size={10} color="#777" strokeWidth={2} />
                   <Text style={styles.metaTxt}>{Math.floor(card.duration / 60)} நிமிடம்</Text>
                 </>
               )}
@@ -129,7 +129,7 @@ function CardRow({
                 style={[styles.quizBtn, { backgroundColor: color + "25", borderColor: color + "66" }]}
                 activeOpacity={0.7}
               >
-                <Ionicons name="help-circle" size={14} color={color} />
+                <HelpCircle size={14} color={color} strokeWidth={2.5} />
                 <Text style={[styles.quizBtnTxt, { color }]}>Quiz</Text>
               </TouchableOpacity>
             )}
@@ -139,11 +139,11 @@ function CardRow({
               style={[styles.playBtn, { backgroundColor: isActive && isPlaying ? color : color + "33" }]}
               activeOpacity={0.75}
             >
-              <Ionicons
-                name={isActive && isPlaying ? "pause" : "play"}
-                size={18}
-                color={isActive && isPlaying ? "#fff" : color}
-              />
+              {isActive && isPlaying ? (
+                <Pause size={18} color="#fff" strokeWidth={2.5} fill="#fff" />
+              ) : (
+                <Play size={18} color={color} strokeWidth={2.5} fill={color} />
+              )}
             </TouchableOpacity>
           </View>
         </Animated.View>
@@ -182,7 +182,7 @@ function EmptyCards({ color }: { color: string }) {
   return (
     <View style={styles.emptyBox}>
       <View style={[styles.emptyIconBox, { backgroundColor: color + "22" }]}>
-        <Ionicons name="musical-notes-outline" size={40} color={color} />
+        <Music size={40} color={color} strokeWidth={1.5} />
       </View>
       <Text style={styles.emptyTitle}>பாடங்கள் இல்லை</Text>
       <Text style={styles.emptyHint}>
@@ -247,7 +247,7 @@ export default function SubcategoryScreen() {
         {/* ── Header ── */}
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={20} color="#fff" />
+            <ArrowLeft size={20} color="#fff" strokeWidth={2.5} />
           </Pressable>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle} numberOfLines={1}>{screenTitle}</Text>
@@ -285,7 +285,7 @@ export default function SubcategoryScreen() {
         {/* ── Stats bar ── */}
         {!loading && (
           <View style={[styles.statsRow, { backgroundColor: color + "15" }]}>
-            <Ionicons name="musical-notes" size={13} color={color} />
+            <Music size={13} color={color} strokeWidth={2} />
             <Text style={[styles.statsTxt, { color }]}>{cards.length} பாடங்கள்</Text>
             {category && (
               <>
@@ -342,7 +342,7 @@ export default function SubcategoryScreen() {
                 <Text style={[styles.loadMoreTxt, { color }]}>
                   மேலும் {cards.length - visibleCount} பாடங்கள்
                 </Text>
-                <Ionicons name="chevron-down" size={16} color={color} />
+                <ChevronDown size={16} color={color} strokeWidth={2.5} />
               </Pressable>
             )}
 

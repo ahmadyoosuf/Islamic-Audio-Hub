@@ -425,6 +425,171 @@ export interface SeedResult {
   errors:        { titleEn: string; message: string }[];
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// createHadithCards()
+//
+// 1. Finds category  where nameEn = "Hadith"
+// 2. Finds subcategory where name = "ஹதீஸ் விரிவுரை" (under that category)
+// 3. Checks existing cards in that subcategory to skip duplicates
+// 4. Creates Hadith 1–10 cards
+// ─────────────────────────────────────────────────────────────────────────────
+
+const HADITH_CARDS: Array<{ titleEn: string; titleTa: string; sortOrder: number }> = [
+  { titleEn: "Hadith 1",  titleTa: "ஹதீஸ் 1",  sortOrder: 1  },
+  { titleEn: "Hadith 2",  titleTa: "ஹதீஸ் 2",  sortOrder: 2  },
+  { titleEn: "Hadith 3",  titleTa: "ஹதீஸ் 3",  sortOrder: 3  },
+  { titleEn: "Hadith 4",  titleTa: "ஹதீஸ் 4",  sortOrder: 4  },
+  { titleEn: "Hadith 5",  titleTa: "ஹதீஸ் 5",  sortOrder: 5  },
+  { titleEn: "Hadith 6",  titleTa: "ஹதீஸ் 6",  sortOrder: 6  },
+  { titleEn: "Hadith 7",  titleTa: "ஹதீஸ் 7",  sortOrder: 7  },
+  { titleEn: "Hadith 8",  titleTa: "ஹதீஸ் 8",  sortOrder: 8  },
+  { titleEn: "Hadith 9",  titleTa: "ஹதீஸ் 9",  sortOrder: 9  },
+  { titleEn: "Hadith 10", titleTa: "ஹதீஸ் 10", sortOrder: 10 },
+];
+
+export async function createHadithCards(): Promise<SeedResult> {
+  console.log("[Seeder] ── createHadithCards() started ──────────────────────");
+
+  // ── Step 1: Find category where nameEn = "Hadith" ─────────────────────────
+  console.log('[Seeder] Step 1: Looking for category nameEn = "Hadith"...');
+
+  const catSnap = await getDocs(
+    query(collection(db, "categories"), where("nameEn", "==", "Hadith"))
+  );
+
+  if (catSnap.empty) {
+    console.warn('[Seeder] nameEn = "Hadith" not found, trying name field...');
+    const catSnap2 = await getDocs(
+      query(collection(db, "categories"), where("name", "==", "Hadith"))
+    );
+    if (catSnap2.empty) {
+      throw new Error(
+        'Category "Hadith" not found. Check that the category exists in Firestore with nameEn = "Hadith".'
+      );
+    }
+    const catDoc = catSnap2.docs[0];
+    console.log(`[Seeder] ✅ Category found via name field: id=${catDoc.id}`);
+    return _seedHadithCards(catDoc.id);
+  }
+
+  const catDoc = catSnap.docs[0];
+  console.log(`[Seeder] ✅ Category found: id=${catDoc.id}, nameEn=${catDoc.data().nameEn}`);
+  return _seedHadithCards(catDoc.id);
+}
+
+async function _seedHadithCards(categoryId: string): Promise<SeedResult> {
+  const result: SeedResult = {
+    categoryId,
+    subcategoryId: "",
+    created: [],
+    skipped: [],
+    errors:  [],
+  };
+
+  // ── Step 2: Find subcategory where name = "ஹதீஸ் விரிவுரை" ───────────────
+  console.log('[Seeder] Step 2: Looking for subcategory name = "ஹதீஸ் விரிவுரை"...');
+
+  const subSnap = await getDocs(
+    query(
+      collection(db, "subcategories"),
+      where("categoryId", "==", categoryId),
+      where("name", "==", "ஹதீஸ் விரிவுரை")
+    )
+  );
+
+  if (subSnap.empty) {
+    console.warn('[Seeder] "ஹதீஸ் விரிவுரை" not found, trying nameEn = "Hadith Virivurai"...');
+    const subSnap2 = await getDocs(
+      query(
+        collection(db, "subcategories"),
+        where("categoryId", "==", categoryId),
+        where("nameEn", "==", "Hadith Virivurai")
+      )
+    );
+    if (subSnap2.empty) {
+      throw new Error(
+        '"ஹதீஸ் விரிவுரை" subcategory not found under Hadith category. ' +
+        'Create it first in the CMS with name = "ஹதீஸ் விரிவுரை".'
+      );
+    }
+    result.subcategoryId = subSnap2.docs[0].id;
+    console.log(`[Seeder] ✅ Subcategory found via nameEn: id=${result.subcategoryId}`);
+  } else {
+    result.subcategoryId = subSnap.docs[0].id;
+    console.log(`[Seeder] ✅ Subcategory found: id=${result.subcategoryId}, name=${subSnap.docs[0].data().name}`);
+  }
+
+  const subcategoryId = result.subcategoryId;
+
+  // ── Step 3: Fetch existing cards to detect duplicates ─────────────────────
+  console.log("[Seeder] Step 3: Checking existing cards for duplicates...");
+
+  const existingSnap = await getDocs(
+    query(collection(db, "cards"), where("subcategoryId", "==", subcategoryId))
+  );
+
+  const existingTitles = new Set<string>(
+    existingSnap.docs.map(d => ((d.data().titleEn as string) ?? "").toLowerCase().trim())
+  );
+
+  console.log(
+    `[Seeder] Found ${existingSnap.size} existing cards. ` +
+    `Existing titles: [${[...existingTitles].join(", ")}]`
+  );
+
+  // ── Step 4: Create missing cards ──────────────────────────────────────────
+  console.log("[Seeder] Step 4: Creating Hadith cards...");
+
+  for (const hadith of HADITH_CARDS) {
+    const key = hadith.titleEn.toLowerCase().trim();
+
+    if (existingTitles.has(key)) {
+      console.log(`[Seeder]   ⏭ SKIP  — "${hadith.titleEn}" already exists`);
+      result.skipped.push(hadith.titleEn);
+      continue;
+    }
+
+    try {
+      const ref = await addDoc(collection(db, "cards"), {
+        categoryId,
+        subcategoryId,
+        titleEn:      hadith.titleEn,
+        titleTa:      hadith.titleTa,
+        audioUrl:     "",
+        duration:     0,
+        description:  "",
+        isPremium:    false,
+        hasQuiz:      true,
+        viewCount:    0,
+        sortOrder:    hadith.sortOrder,
+        quiz:         [],
+        quizTitleTa:  "",
+        quizTitleEn:  "",
+        createdAt:    serverTimestamp(),
+      });
+
+      console.log(`[Seeder]   ✅ CREATED — "${hadith.titleEn}" → docId: ${ref.id}`);
+      result.created.push(hadith.titleEn);
+      existingTitles.add(key);
+    } catch (err: any) {
+      const msg = err?.message ?? "Unknown error";
+      console.error(`[Seeder]   ❌ ERROR  — "${hadith.titleEn}": ${msg}`);
+      result.errors.push({ titleEn: hadith.titleEn, message: msg });
+    }
+  }
+
+  // ── Step 5: Summary ───────────────────────────────────────────────────────
+  console.log("[Seeder] ── Summary ─────────────────────────────────────────");
+  console.log(`[Seeder]   Category ID:    ${result.categoryId}`);
+  console.log(`[Seeder]   Subcategory ID: ${result.subcategoryId}`);
+  console.log(`[Seeder]   ✅ Created:  ${result.created.length} cards → [${result.created.join(", ")}]`);
+  console.log(`[Seeder]   ⏭ Skipped:  ${result.skipped.length} cards → [${result.skipped.join(", ")}]`);
+  console.log(`[Seeder]   ❌ Errors:   ${result.errors.length}`);
+  console.log("[Seeder] ── createHadithCards() done ────────────────────────");
+
+  return result;
+}
+
 // The 10 Surahs to seed
 const VIRIVURAI_SURAHS: Array<{ titleEn: string; titleTa: string; sortOrder: number }> = [
   { titleEn: "Al-Fatiha",  titleTa: "சூரா ஃபாத்திஹா",  sortOrder: 1  },

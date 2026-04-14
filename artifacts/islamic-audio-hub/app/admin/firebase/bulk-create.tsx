@@ -17,6 +17,7 @@ import {
   getCategories,
   getSubcategories,
   createVirivuraiCards,
+  createHadithCards,
   type FBCategory,
   type FBSubcategory,
   type SeedResult,
@@ -141,10 +142,15 @@ export default function BulkCreateScreen() {
   const [running,  setRunning]  = useState(false);
   const [finished, setFinished] = useState(false);
 
-  // ── Quick Seed state ──
+  // ── Quick Seed state (Virivurai) ──
   const [quickRunning, setQuickRunning] = useState(false);
   const [quickResult,  setQuickResult]  = useState<SeedResult | null>(null);
   const [quickError,   setQuickError]   = useState<string | null>(null);
+
+  // ── Quick Seed state (Hadith) ──
+  const [hadithRunning, setHadithRunning] = useState(false);
+  const [hadithResult,  setHadithResult]  = useState<SeedResult | null>(null);
+  const [hadithError,   setHadithError]   = useState<string | null>(null);
 
   // ── Load categories and subcategories ──
 
@@ -194,6 +200,37 @@ export default function BulkCreateScreen() {
   const selectedCount = cards.filter(c => c.selected).length;
   const doneCount     = cards.filter(c => c.status === "done").length;
   const errorCount    = cards.filter(c => c.status === "error").length;
+
+  // ── Quick Seed: createHadithCards() ──
+
+  async function handleHadithSeed() {
+    Alert.alert(
+      "ஹதீஸ் Seed",
+      'Hadith → "ஹதீஸ் விரிவுரை" subcategory-ல் 10 ஹதீஸ் cards உருவாக்கவா?\n\n' +
+      "ஏற்கனவே உள்ள cards skip ஆகும் (duplicate இல்லை).",
+      [
+        { text: "இல்லை", style: "cancel" },
+        {
+          text: "ஆம், உருவாக்கு",
+          onPress: async () => {
+            setHadithRunning(true);
+            setHadithResult(null);
+            setHadithError(null);
+            try {
+              const result = await createHadithCards();
+              setHadithResult(result);
+            } catch (err: any) {
+              const msg = err?.message ?? "Unknown error";
+              setHadithError(msg);
+              console.error("[HadithSeed] Failed:", msg);
+            } finally {
+              setHadithRunning(false);
+            }
+          },
+        },
+      ]
+    );
+  }
 
   // ── Quick Seed: createVirivuraiCards() ──
 
@@ -460,6 +497,122 @@ export default function BulkCreateScreen() {
               )}
 
               <Pressable onPress={() => setQuickResult(null)} style={s.quickResetLink} hitSlop={8}>
+                <Ionicons name="refresh-outline" size={14} color={C.sub} />
+                <Text style={s.quickResetTxt}>மீண்டும் இயக்கு</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+
+        {/* ── Hadith Quick Seed Panel ── */}
+        <View style={[s.quickPanel, { marginTop: 12 }]}>
+          <View style={s.quickHeader}>
+            <View style={[s.quickIconWrap, { backgroundColor: "#8b5cf622" }]}>
+              <Ionicons name="book" size={20} color="#8b5cf6" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.quickTitle}>ஹதீஸ் Quick Seed</Text>
+              <Text style={s.quickSub}>
+                Hadith → ஹதீஸ் விரிவுரை — 10 ஹதீஸ் cards auto-create
+              </Text>
+            </View>
+          </View>
+
+          <View style={s.quickInfo}>
+            <View style={s.quickInfoItem}>
+              <Ionicons name="search-outline" size={13} color={C.blue} />
+              <Text style={s.quickInfoTxt}>Auto-detects Hadith category & ஹதீஸ் விரிவுரை subcategory</Text>
+            </View>
+            <View style={s.quickInfoItem}>
+              <Ionicons name="shield-checkmark-outline" size={13} color={C.valid} />
+              <Text style={s.quickInfoTxt}>Duplicate-safe — existing cards are skipped</Text>
+            </View>
+            <View style={s.quickInfoItem}>
+              <Ionicons name="layers-outline" size={13} color={C.sub} />
+              <Text style={s.quickInfoTxt}>Calls createHadithCards() from Firestore service</Text>
+            </View>
+          </View>
+
+          {!hadithResult && !hadithError && (
+            <TouchableOpacity
+              style={[s.quickBtn, { backgroundColor: "#8b5cf6" }, hadithRunning && s.quickBtnRunning]}
+              onPress={handleHadithSeed}
+              disabled={hadithRunning}
+              activeOpacity={0.85}
+            >
+              {hadithRunning ? (
+                <>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={s.quickBtnTxt}>உருவாக்குகிறது...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="rocket-outline" size={18} color="#fff" />
+                  <Text style={s.quickBtnTxt}>ஒரே click-ல் 10 ஹதீஸ் Cards உருவாக்கு</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {hadithError && (
+            <View style={s.quickErrBox}>
+              <Ionicons name="alert-circle" size={18} color={C.red} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.quickErrTitle}>பிழை ஏற்பட்டது</Text>
+                <Text style={s.quickErrMsg}>{hadithError}</Text>
+                <Text style={s.quickErrHint}>
+                  Firebase CMS-ல் "Hadith" category மற்றும் "ஹதீஸ் விரிவுரை" subcategory உருவாக்கியுள்ளீர்களா என்று சரிபார்க்கவும்.
+                </Text>
+              </View>
+              <Pressable onPress={() => setHadithError(null)} hitSlop={8}>
+                <Ionicons name="refresh" size={20} color={C.red} />
+              </Pressable>
+            </View>
+          )}
+
+          {hadithResult && (
+            <View style={s.quickResultBox}>
+              <View style={s.quickResultHeader}>
+                <Ionicons name="checkmark-circle" size={22} color={C.valid} />
+                <Text style={s.quickResultTitle}>
+                  {hadithResult.created.length === 0
+                    ? "எல்லாம் ஏற்கனவே உள்ளன"
+                    : `${hadithResult.created.length} ஹதீஸ் Cards உருவாக்கப்பட்டன!`}
+                </Text>
+              </View>
+              <View style={s.quickIdRow}>
+                <Text style={s.quickIdLabel}>Category ID:</Text>
+                <Text style={s.quickIdVal} numberOfLines={1}>{hadithResult.categoryId}</Text>
+              </View>
+              <View style={s.quickIdRow}>
+                <Text style={s.quickIdLabel}>Subcategory ID:</Text>
+                <Text style={s.quickIdVal} numberOfLines={1}>{hadithResult.subcategoryId}</Text>
+              </View>
+              {hadithResult.created.length > 0 && (
+                <View style={s.quickListBlock}>
+                  <Text style={s.quickListLabel}>✅ உருவாக்கப்பட்டவை ({hadithResult.created.length})</Text>
+                  {hadithResult.created.map((t, i) => (
+                    <Text key={i} style={[s.quickListItem, { color: C.valid }]}>• {t}</Text>
+                  ))}
+                </View>
+              )}
+              {hadithResult.skipped.length > 0 && (
+                <View style={s.quickListBlock}>
+                  <Text style={s.quickListLabel}>⏭ Skip ஆனவை ({hadithResult.skipped.length})</Text>
+                  {hadithResult.skipped.map((t, i) => (
+                    <Text key={i} style={[s.quickListItem, { color: C.sub }]}>• {t}</Text>
+                  ))}
+                </View>
+              )}
+              {hadithResult.errors.length > 0 && (
+                <View style={s.quickListBlock}>
+                  <Text style={s.quickListLabel}>❌ பிழை ({hadithResult.errors.length})</Text>
+                  {hadithResult.errors.map((e, i) => (
+                    <Text key={i} style={[s.quickListItem, { color: C.red }]}>• {e.titleEn}: {e.message}</Text>
+                  ))}
+                </View>
+              )}
+              <Pressable onPress={() => setHadithResult(null)} style={s.quickResetLink} hitSlop={8}>
                 <Ionicons name="refresh-outline" size={14} color={C.sub} />
                 <Text style={s.quickResetTxt}>மீண்டும் இயக்கு</Text>
               </Pressable>

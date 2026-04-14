@@ -1,5 +1,13 @@
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import {
+  ChevronDown,
+  Music,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  LoaderCircle,
+} from "lucide-react-native";
 import React, { useEffect, useRef } from "react";
 import {
   Animated,
@@ -94,7 +102,7 @@ function MiniPlayer() {
           ]}
         >
           <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
-            <Ionicons name="musical-notes" size={20} color="#c8a84b" />
+            <Music size={20} color="#c8a84b" strokeWidth={2} />
           </Animated.View>
         </View>
         <View style={styles.miniInfo}>
@@ -120,13 +128,11 @@ function MiniPlayer() {
             }}
           >
             {isLoading ? (
-              <Ionicons name="hourglass" size={28} color="#c8a84b" />
+              <LoaderCircle size={28} color="#c8a84b" strokeWidth={2} />
+            ) : isPlaying ? (
+              <Pause size={36} color="#c8a84b" strokeWidth={2} fill="#c8a84b" />
             ) : (
-              <Ionicons
-                name={isPlaying ? "pause-circle" : "play-circle"}
-                size={36}
-                color="#c8a84b"
-              />
+              <Play size={36} color="#c8a84b" strokeWidth={2} fill="#c8a84b" />
             )}
           </Pressable>
         </View>
@@ -185,11 +191,7 @@ function FullPlayer() {
       >
         <View style={styles.fullHeader}>
           <Pressable onPress={() => setIsExpanded(false)} style={styles.fullClose}>
-            <Ionicons
-              name="chevron-down"
-              size={28}
-              color={colors.mutedForeground}
-            />
+            <ChevronDown size={28} color={colors.mutedForeground} strokeWidth={2} />
           </Pressable>
           <Text style={[styles.fullHeaderTitle, { color: colors.mutedForeground }]}>
             இப்போது கேட்கிறீர்கள்
@@ -202,7 +204,7 @@ function FullPlayer() {
             style={[styles.artworkCircle, { backgroundColor: "#c8a84b22" }]}
           >
             <View style={[styles.artworkInner, { backgroundColor: "#c8a84b33" }]}>
-              <Ionicons name="musical-notes" size={64} color="#c8a84b" />
+              <Music size={64} color="#c8a84b" strokeWidth={1.5} />
             </View>
           </View>
         </View>
@@ -253,7 +255,7 @@ function FullPlayer() {
 
         <View style={styles.controls}>
           <Pressable onPress={playPrev} style={styles.ctrlBtn}>
-            <Ionicons name="play-skip-back" size={28} color={colors.foreground} />
+            <SkipBack size={28} color={colors.foreground} strokeWidth={2} fill={colors.foreground} />
           </Pressable>
           <Pressable
             onPress={async () => {
@@ -263,17 +265,15 @@ function FullPlayer() {
             style={[styles.playBtnLarge, { backgroundColor: "#c8a84b" }]}
           >
             {isLoading ? (
-              <Ionicons name="hourglass" size={32} color="#000" />
+              <LoaderCircle size={32} color="#000" strokeWidth={2} />
+            ) : isPlaying ? (
+              <Pause size={32} color="#000" strokeWidth={2.5} fill="#000" />
             ) : (
-              <Ionicons
-                name={isPlaying ? "pause" : "play"}
-                size={32}
-                color="#000"
-              />
+              <Play size={32} color="#000" strokeWidth={2.5} fill="#000" />
             )}
           </Pressable>
           <Pressable onPress={playNext} style={styles.ctrlBtn}>
-            <Ionicons name="play-skip-forward" size={28} color={colors.foreground} />
+            <SkipForward size={28} color={colors.foreground} strokeWidth={2} fill={colors.foreground} />
           </Pressable>
         </View>
 

@@ -581,6 +581,14 @@ export default function FirebaseAdminScreen() {
           <Text style={s.headerTitle}>🔥 Firebase CMS</Text>
           <Text style={s.headerSub}>categories → subcategories → cards</Text>
         </View>
+        <Pressable
+          onPress={() => router.push("/admin/firebase/bulk-create" as any)}
+          style={s.bulkBtn}
+          hitSlop={8}
+        >
+          <Ionicons name="layers-outline" size={15} color="#fff" />
+          <Text style={s.bulkBtnTxt}>Bulk</Text>
+        </Pressable>
       </View>
 
       {/* Tabs */}
@@ -649,4 +657,7 @@ const s = StyleSheet.create({
   iconBtn:     { width: 32, height: 32, borderRadius: 8, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center" },
   quizPill:    { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
   quizPillTxt: { fontSize: 10, color: C.green, fontWeight: "700" },
+
+  bulkBtn:     { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: C.green, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  bulkBtnTxt:  { color: "#fff", fontSize: 12, fontWeight: "800" },
 });

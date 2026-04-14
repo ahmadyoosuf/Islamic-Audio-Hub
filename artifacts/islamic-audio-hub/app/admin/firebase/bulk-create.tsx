@@ -16,8 +16,10 @@ import {
   addCard,
   getCategories,
   getSubcategories,
+  createVirivuraiCards,
   type FBCategory,
   type FBSubcategory,
+  type SeedResult,
 } from "@/services/firebase.firestore";
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -139,6 +141,11 @@ export default function BulkCreateScreen() {
   const [running,  setRunning]  = useState(false);
   const [finished, setFinished] = useState(false);
 
+  // ── Quick Seed state ──
+  const [quickRunning, setQuickRunning] = useState(false);
+  const [quickResult,  setQuickResult]  = useState<SeedResult | null>(null);
+  const [quickError,   setQuickError]   = useState<string | null>(null);
+
   // ── Load categories and subcategories ──
 
   const loadMeta = useCallback(async () => {
@@ -187,6 +194,37 @@ export default function BulkCreateScreen() {
   const selectedCount = cards.filter(c => c.selected).length;
   const doneCount     = cards.filter(c => c.status === "done").length;
   const errorCount    = cards.filter(c => c.status === "error").length;
+
+  // ── Quick Seed: createVirivuraiCards() ──
+
+  async function handleQuickSeed() {
+    Alert.alert(
+      "விரிவுரை Seed",
+      'Quran → "விரிவுரை" subcategory-ல் 10 சூரா cards உருவாக்கவா?\n\n' +
+      "ஏற்கனவே உள்ள cards skip ஆகும் (duplicate இல்லை).",
+      [
+        { text: "இல்லை", style: "cancel" },
+        {
+          text: "ஆம், உருவாக்கு",
+          onPress: async () => {
+            setQuickRunning(true);
+            setQuickResult(null);
+            setQuickError(null);
+            try {
+              const result = await createVirivuraiCards();
+              setQuickResult(result);
+            } catch (err: any) {
+              const msg = err?.message ?? "Unknown error";
+              setQuickError(msg);
+              console.error("[QuickSeed] Failed:", msg);
+            } finally {
+              setQuickRunning(false);
+            }
+          },
+        },
+      ]
+    );
+  }
 
   // ── Run bulk create ──
 
@@ -299,6 +337,142 @@ export default function BulkCreateScreen() {
       </View>
 
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+
+        {/* ── Quick Seed Panel ── */}
+        <View style={s.quickPanel}>
+          <View style={s.quickHeader}>
+            <View style={s.quickIconWrap}>
+              <Ionicons name="flash" size={20} color={C.gold} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.quickTitle}>விரிவுரை Quick Seed</Text>
+              <Text style={s.quickSub}>
+                Quran → விரிவுரை — 10 சூரா cards auto-create
+              </Text>
+            </View>
+          </View>
+
+          {/* Info row */}
+          <View style={s.quickInfo}>
+            <View style={s.quickInfoItem}>
+              <Ionicons name="search-outline" size={13} color={C.blue} />
+              <Text style={s.quickInfoTxt}>Auto-detects category & subcategory by name</Text>
+            </View>
+            <View style={s.quickInfoItem}>
+              <Ionicons name="shield-checkmark-outline" size={13} color={C.valid} />
+              <Text style={s.quickInfoTxt}>Duplicate-safe — existing cards are skipped</Text>
+            </View>
+            <View style={s.quickInfoItem}>
+              <Ionicons name="layers-outline" size={13} color={C.sub} />
+              <Text style={s.quickInfoTxt}>Calls createVirivuraiCards() from Firestore service</Text>
+            </View>
+          </View>
+
+          {/* Quick seed button */}
+          {!quickResult && !quickError && (
+            <TouchableOpacity
+              style={[s.quickBtn, quickRunning && s.quickBtnRunning]}
+              onPress={handleQuickSeed}
+              disabled={quickRunning}
+              activeOpacity={0.85}
+            >
+              {quickRunning ? (
+                <>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={s.quickBtnTxt}>உருவாக்குகிறது...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="rocket-outline" size={18} color="#fff" />
+                  <Text style={s.quickBtnTxt}>ஒரே click-ல் 10 Cards உருவாக்கு</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {/* Quick seed error */}
+          {quickError && (
+            <View style={s.quickErrBox}>
+              <Ionicons name="alert-circle" size={18} color={C.red} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.quickErrTitle}>பிழை ஏற்பட்டது</Text>
+                <Text style={s.quickErrMsg}>{quickError}</Text>
+                <Text style={s.quickErrHint}>
+                  Firebase CMS-ல் "Quran" category மற்றும் "விரிவுரை" subcategory உருவாக்கியுள்ளீர்களா என்று சரிபார்க்கவும்.
+                </Text>
+              </View>
+              <Pressable onPress={() => setQuickError(null)} hitSlop={8}>
+                <Ionicons name="refresh" size={20} color={C.red} />
+              </Pressable>
+            </View>
+          )}
+
+          {/* Quick seed success result */}
+          {quickResult && (
+            <View style={s.quickResultBox}>
+              <View style={s.quickResultHeader}>
+                <Ionicons name="checkmark-circle" size={22} color={C.valid} />
+                <Text style={s.quickResultTitle}>
+                  {quickResult.created.length === 0
+                    ? "எல்லாம் ஏற்கனவே உள்ளன"
+                    : `${quickResult.created.length} Cards உருவாக்கப்பட்டன!`}
+                </Text>
+              </View>
+
+              {/* IDs */}
+              <View style={s.quickIdRow}>
+                <Text style={s.quickIdLabel}>Category ID:</Text>
+                <Text style={s.quickIdVal} numberOfLines={1}>{quickResult.categoryId}</Text>
+              </View>
+              <View style={s.quickIdRow}>
+                <Text style={s.quickIdLabel}>Subcategory ID:</Text>
+                <Text style={s.quickIdVal} numberOfLines={1}>{quickResult.subcategoryId}</Text>
+              </View>
+
+              {/* Created list */}
+              {quickResult.created.length > 0 && (
+                <View style={s.quickListBlock}>
+                  <Text style={s.quickListLabel}>✅ உருவாக்கப்பட்டவை ({quickResult.created.length})</Text>
+                  {quickResult.created.map((t, i) => (
+                    <Text key={i} style={[s.quickListItem, { color: C.valid }]}>• {t}</Text>
+                  ))}
+                </View>
+              )}
+
+              {/* Skipped list */}
+              {quickResult.skipped.length > 0 && (
+                <View style={s.quickListBlock}>
+                  <Text style={s.quickListLabel}>⏭ Skip ஆனவை ({quickResult.skipped.length})</Text>
+                  {quickResult.skipped.map((t, i) => (
+                    <Text key={i} style={[s.quickListItem, { color: C.sub }]}>• {t}</Text>
+                  ))}
+                </View>
+              )}
+
+              {/* Errors */}
+              {quickResult.errors.length > 0 && (
+                <View style={s.quickListBlock}>
+                  <Text style={s.quickListLabel}>❌ பிழை ({quickResult.errors.length})</Text>
+                  {quickResult.errors.map((e, i) => (
+                    <Text key={i} style={[s.quickListItem, { color: C.red }]}>• {e.titleEn}: {e.message}</Text>
+                  ))}
+                </View>
+              )}
+
+              <Pressable onPress={() => setQuickResult(null)} style={s.quickResetLink} hitSlop={8}>
+                <Ionicons name="refresh-outline" size={14} color={C.sub} />
+                <Text style={s.quickResetTxt}>மீண்டும் இயக்கு</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+
+        {/* Divider */}
+        <View style={s.divider}>
+          <View style={s.dividerLine} />
+          <Text style={s.dividerTxt}>அல்லது கைமுறை தேர்வு</Text>
+          <View style={s.dividerLine} />
+        </View>
 
         {/* ── Category picker ── */}
         <View style={s.section}>
@@ -596,4 +770,41 @@ const s = StyleSheet.create({
   noteBox:   { backgroundColor: "#fffbeb", borderRadius: 12, borderWidth: 1, borderColor: C.gold + "66", padding: 14, marginBottom: 8 },
   noteTitle: { fontSize: 13, fontWeight: "800", color: "#92400e", marginBottom: 8 },
   noteLine:  { fontSize: 12, color: "#78350f", lineHeight: 20, marginBottom: 2 },
+
+  // Divider
+  divider:     { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 20 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
+  dividerTxt:  { fontSize: 11, color: C.sub, fontWeight: "600" },
+
+  // ── Quick Seed Panel ──
+  quickPanel:       { backgroundColor: "#fff", borderRadius: 16, borderWidth: 2, borderColor: C.gold + "88", padding: 16, marginBottom: 20 },
+  quickHeader:      { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
+  quickIconWrap:    { width: 44, height: 44, borderRadius: 12, backgroundColor: C.gold + "22", alignItems: "center", justifyContent: "center" },
+  quickTitle:       { fontSize: 15, fontWeight: "800", color: C.txt },
+  quickSub:         { fontSize: 11, color: C.sub, marginTop: 2 },
+
+  quickInfo:        { gap: 7, marginBottom: 16 },
+  quickInfoItem:    { flexDirection: "row", alignItems: "center", gap: 8 },
+  quickInfoTxt:     { fontSize: 12, color: C.sub, flex: 1 },
+
+  quickBtn:         { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, backgroundColor: C.green, borderRadius: 12, paddingVertical: 14 },
+  quickBtnRunning:  { backgroundColor: C.blue },
+  quickBtnTxt:      { color: "#fff", fontWeight: "800", fontSize: 14 },
+
+  quickErrBox:      { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "#fef2f2", borderRadius: 12, borderWidth: 1, borderColor: C.red + "55", padding: 12 },
+  quickErrTitle:    { fontSize: 13, fontWeight: "800", color: C.red, marginBottom: 4 },
+  quickErrMsg:      { fontSize: 12, color: "#991b1b", lineHeight: 18, marginBottom: 6 },
+  quickErrHint:     { fontSize: 11, color: "#b91c1c", lineHeight: 17 },
+
+  quickResultBox:    { backgroundColor: "#f0faf4", borderRadius: 12, borderWidth: 1, borderColor: C.valid + "55", padding: 14 },
+  quickResultHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  quickResultTitle:  { fontSize: 14, fontWeight: "800", color: C.valid, flex: 1 },
+  quickIdRow:        { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+  quickIdLabel:      { fontSize: 11, fontWeight: "700", color: C.sub, width: 100 },
+  quickIdVal:        { flex: 1, fontSize: 11, color: C.txt, fontFamily: "monospace", backgroundColor: "#e8f5ee", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 },
+  quickListBlock:    { marginTop: 10 },
+  quickListLabel:    { fontSize: 12, fontWeight: "800", color: C.txt, marginBottom: 6 },
+  quickListItem:     { fontSize: 12, lineHeight: 22 },
+  quickResetLink:    { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 12, alignSelf: "flex-start" },
+  quickResetTxt:     { fontSize: 12, color: C.sub, fontWeight: "600" },
 });

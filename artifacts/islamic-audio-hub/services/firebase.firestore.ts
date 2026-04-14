@@ -9,6 +9,7 @@ import {
   getDoc,
   onSnapshot,
   query,
+  orderBy,
   where,
   serverTimestamp,
   Timestamp,
@@ -402,4 +403,195 @@ export function subscribeAllCards(
       onError?.(err);
     }
   );
+}
+
+// ─── Bulk Seeder ───────────────────────────────────────────────────────────────
+//
+// createVirivuraiCards()
+//
+// 1. Finds category  where nameEn = "Quran"
+// 2. Finds subcategory where name = "விரிவுரை" (under that category)
+// 3. Checks existing cards in that subcategory to skip duplicates
+// 4. Creates any missing surah cards
+//
+// Uses Firebase v9 modular SDK (collection / query / where / getDocs / addDoc)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface SeedResult {
+  categoryId:    string;
+  subcategoryId: string;
+  created:       string[];   // titleEn of newly created cards
+  skipped:       string[];   // titleEn of cards that already existed
+  errors:        { titleEn: string; message: string }[];
+}
+
+// The 10 Surahs to seed
+const VIRIVURAI_SURAHS: Array<{ titleEn: string; titleTa: string; sortOrder: number }> = [
+  { titleEn: "Al-Fatiha",  titleTa: "சூரா ஃபாத்திஹா",  sortOrder: 1  },
+  { titleEn: "An-Nas",     titleTa: "சூரா நாஸ்",         sortOrder: 2  },
+  { titleEn: "Al-Falaq",   titleTa: "சூரா ஃபலக்",        sortOrder: 3  },
+  { titleEn: "Al-Ikhlas",  titleTa: "சூரா இக்லாஸ்",      sortOrder: 4  },
+  { titleEn: "Al-Lahab",   titleTa: "சூரா லஹப்",          sortOrder: 5  },
+  { titleEn: "Al-Fath",    titleTa: "சூரா ஃபத்",          sortOrder: 6  },
+  { titleEn: "Al-Kafirun", titleTa: "சூரா காஃபிரூன்",    sortOrder: 7  },
+  { titleEn: "Al-Kawthar", titleTa: "சூரா கவ்சர்",        sortOrder: 8  },
+  { titleEn: "Al-Ma'un",   titleTa: "சூரா மாஊன்",         sortOrder: 9  },
+  { titleEn: "Quraysh",    titleTa: "சூரா குரைஷ்",        sortOrder: 10 },
+];
+
+export async function createVirivuraiCards(): Promise<SeedResult> {
+  console.log("[Seeder] ── createVirivuraiCards() started ──────────────────");
+
+  // ── Step 1: Find category where nameEn = "Quran" ──────────────────────────
+  console.log('[Seeder] Step 1: Looking for category nameEn = "Quran"...');
+
+  const catSnap = await getDocs(
+    query(collection(db, "categories"), where("nameEn", "==", "Quran"))
+  );
+
+  if (catSnap.empty) {
+    // Fallback: try matching name field (Tamil name might be stored instead)
+    console.warn('[Seeder] nameEn = "Quran" not found, trying name field...');
+    const catSnap2 = await getDocs(
+      query(collection(db, "categories"), where("name", "==", "Quran"))
+    );
+    if (catSnap2.empty) {
+      throw new Error(
+        'Category "Quran" not found. Check that the category exists in Firestore with nameEn = "Quran".'
+      );
+    }
+    const catDoc = catSnap2.docs[0];
+    console.log(`[Seeder] ✅ Category found via name field: id=${catDoc.id}`);
+    return _seedCards(catDoc.id);
+  }
+
+  const catDoc = catSnap.docs[0];
+  console.log(`[Seeder] ✅ Category found: id=${catDoc.id}, nameEn=${catDoc.data().nameEn}`);
+
+  return _seedCards(catDoc.id);
+}
+
+async function _seedCards(categoryId: string): Promise<SeedResult> {
+  const result: SeedResult = {
+    categoryId,
+    subcategoryId: "",
+    created: [],
+    skipped: [],
+    errors:  [],
+  };
+
+  // ── Step 2: Find subcategory where name = "விரிவுரை" ──────────────────────
+  console.log('[Seeder] Step 2: Looking for subcategory name = "விரிவுரை"...');
+
+  const subSnap = await getDocs(
+    query(
+      collection(db, "subcategories"),
+      where("categoryId", "==", categoryId),
+      where("name", "==", "விரிவுரை")
+    )
+  );
+
+  if (subSnap.empty) {
+    // Fallback: try nameEn = "Virivurai"
+    console.warn('[Seeder] name = "விரிவுரை" not found, trying nameEn = "Virivurai"...');
+    const subSnap2 = await getDocs(
+      query(
+        collection(db, "subcategories"),
+        where("categoryId", "==", categoryId),
+        where("nameEn", "==", "Virivurai")
+      )
+    );
+    if (subSnap2.empty) {
+      throw new Error(
+        '"விரிவுரை" subcategory not found under Quran category. ' +
+        'Create it first in the CMS with name = "விரிவுரை".'
+      );
+    }
+    const subDoc = subSnap2.docs[0];
+    console.log(`[Seeder] ✅ Subcategory found via nameEn: id=${subDoc.id}`);
+    result.subcategoryId = subDoc.id;
+  } else {
+    const subDoc = subSnap.docs[0];
+    console.log(
+      `[Seeder] ✅ Subcategory found: id=${subDoc.id}, name=${subDoc.data().name}`
+    );
+    result.subcategoryId = subDoc.id;
+  }
+
+  const subcategoryId = result.subcategoryId;
+
+  // ── Step 3: Fetch existing cards to detect duplicates ─────────────────────
+  console.log("[Seeder] Step 3: Checking existing cards for duplicates...");
+
+  const existingSnap = await getDocs(
+    query(
+      collection(db, "cards"),
+      where("subcategoryId", "==", subcategoryId)
+    )
+  );
+
+  // Build a Set of already-existing titleEn values (lowercase) for fast lookup
+  const existingTitles = new Set<string>(
+    existingSnap.docs.map(d => ((d.data().titleEn as string) ?? "").toLowerCase().trim())
+  );
+
+  console.log(
+    `[Seeder] Found ${existingSnap.size} existing cards. ` +
+    `Existing titles: [${[...existingTitles].join(", ")}]`
+  );
+
+  // ── Step 4: Create missing cards ──────────────────────────────────────────
+  console.log("[Seeder] Step 4: Creating cards...");
+
+  for (const surah of VIRIVURAI_SURAHS) {
+    const key = surah.titleEn.toLowerCase().trim();
+
+    if (existingTitles.has(key)) {
+      console.log(`[Seeder]   ⏭ SKIP  — "${surah.titleEn}" already exists`);
+      result.skipped.push(surah.titleEn);
+      continue;
+    }
+
+    try {
+      const ref = await addDoc(collection(db, "cards"), {
+        categoryId,
+        subcategoryId,
+        titleEn:      surah.titleEn,
+        titleTa:      surah.titleTa,
+        audioUrl:     "",
+        duration:     0,
+        description:  "",
+        isPremium:    false,
+        hasQuiz:      true,
+        viewCount:    0,
+        sortOrder:    surah.sortOrder,
+        quiz:         [],
+        quizTitleTa:  "",
+        quizTitleEn:  "",
+        createdAt:    serverTimestamp(),
+      });
+
+      console.log(`[Seeder]   ✅ CREATED — "${surah.titleEn}" → docId: ${ref.id}`);
+      result.created.push(surah.titleEn);
+
+      // Add to existing set so if the same title appears twice in the seed list
+      // it won't be attempted twice
+      existingTitles.add(key);
+    } catch (err: any) {
+      const msg = err?.message ?? "Unknown error";
+      console.error(`[Seeder]   ❌ ERROR  — "${surah.titleEn}": ${msg}`);
+      result.errors.push({ titleEn: surah.titleEn, message: msg });
+    }
+  }
+
+  // ── Step 5: Summary ───────────────────────────────────────────────────────
+  console.log("[Seeder] ── Summary ─────────────────────────────────────────");
+  console.log(`[Seeder]   Category ID:    ${result.categoryId}`);
+  console.log(`[Seeder]   Subcategory ID: ${result.subcategoryId}`);
+  console.log(`[Seeder]   ✅ Created:  ${result.created.length} cards → [${result.created.join(", ")}]`);
+  console.log(`[Seeder]   ⏭ Skipped:  ${result.skipped.length} cards → [${result.skipped.join(", ")}]`);
+  console.log(`[Seeder]   ❌ Errors:   ${result.errors.length}`);
+  console.log("[Seeder] ── createVirivuraiCards() done ──────────────────────");
+
+  return result;
 }

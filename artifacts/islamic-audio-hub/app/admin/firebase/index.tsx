@@ -298,6 +298,7 @@ function SubcategoryManager() {
 // ─── Card Manager ─────────────────────────────────────────────────────────────
 
 function CardManager() {
+  const router = useRouter();
   const [cats,      setCats]      = useState<FBCategory[]>([]);
   const [subs,      setSubs]      = useState<FBSubcategory[]>([]);
   const [cards,     setCards]     = useState<FBCard[]>([]);

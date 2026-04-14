@@ -18,6 +18,7 @@ import {
   getSubcategories,
   createVirivuraiCards,
   createHadithCards,
+  createImanCards,
   type FBCategory,
   type FBSubcategory,
   type SeedResult,
@@ -152,6 +153,11 @@ export default function BulkCreateScreen() {
   const [hadithResult,  setHadithResult]  = useState<SeedResult | null>(null);
   const [hadithError,   setHadithError]   = useState<string | null>(null);
 
+  // ── Quick Seed state (Iman) ──
+  const [imanRunning, setImanRunning] = useState(false);
+  const [imanResult,  setImanResult]  = useState<SeedResult | null>(null);
+  const [imanError,   setImanError]   = useState<string | null>(null);
+
   // ── Load categories and subcategories ──
 
   const loadMeta = useCallback(async () => {
@@ -200,6 +206,38 @@ export default function BulkCreateScreen() {
   const selectedCount = cards.filter(c => c.selected).length;
   const doneCount     = cards.filter(c => c.status === "done").length;
   const errorCount    = cards.filter(c => c.status === "error").length;
+
+  // ── Quick Seed: createImanCards() ──
+
+  async function handleImanSeed() {
+    Alert.alert(
+      "ஈமான் Seed",
+      '"Fundamental of iman" → "ஈமானின் கடமைகள்" subcategory-ல் 16 ஈமான் cards உருவாக்கவா?\n\n' +
+      "முதல் 6 cards இலவசம், மீதி 10 Premium.\n" +
+      "ஏற்கனவே உள்ள cards skip ஆகும் (duplicate இல்லை).",
+      [
+        { text: "இல்லை", style: "cancel" },
+        {
+          text: "ஆம், உருவாக்கு",
+          onPress: async () => {
+            setImanRunning(true);
+            setImanResult(null);
+            setImanError(null);
+            try {
+              const result = await createImanCards();
+              setImanResult(result);
+            } catch (err: any) {
+              const msg = err?.message ?? "Unknown error";
+              setImanError(msg);
+              console.error("[ImanSeed] Failed:", msg);
+            } finally {
+              setImanRunning(false);
+            }
+          },
+        },
+      ]
+    );
+  }
 
   // ── Quick Seed: createHadithCards() ──
 
@@ -613,6 +651,122 @@ export default function BulkCreateScreen() {
                 </View>
               )}
               <Pressable onPress={() => setHadithResult(null)} style={s.quickResetLink} hitSlop={8}>
+                <Ionicons name="refresh-outline" size={14} color={C.sub} />
+                <Text style={s.quickResetTxt}>மீண்டும் இயக்கு</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+
+        {/* ── Iman Quick Seed Panel ── */}
+        <View style={[s.quickPanel, { marginTop: 12 }]}>
+          <View style={s.quickHeader}>
+            <View style={[s.quickIconWrap, { backgroundColor: "#f59e0b22" }]}>
+              <Ionicons name="star" size={20} color="#f59e0b" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.quickTitle}>ஈமான் Quick Seed</Text>
+              <Text style={s.quickSub}>
+                Fundamental of iman → ஈமானின் கடமைகள் — 16 cards (6 Free + 10 Premium)
+              </Text>
+            </View>
+          </View>
+
+          <View style={s.quickInfo}>
+            <View style={s.quickInfoItem}>
+              <Ionicons name="search-outline" size={13} color={C.blue} />
+              <Text style={s.quickInfoTxt}>Auto-detects "Fundamental of iman" category & subcategory</Text>
+            </View>
+            <View style={s.quickInfoItem}>
+              <Ionicons name="shield-checkmark-outline" size={13} color={C.valid} />
+              <Text style={s.quickInfoTxt}>Duplicate-safe — existing cards are skipped</Text>
+            </View>
+            <View style={s.quickInfoItem}>
+              <Ionicons name="lock-closed-outline" size={13} color="#f59e0b" />
+              <Text style={s.quickInfoTxt}>Cards 7–16 are automatically set as Premium</Text>
+            </View>
+          </View>
+
+          {!imanResult && !imanError && (
+            <TouchableOpacity
+              style={[s.quickBtn, { backgroundColor: "#d97706" }, imanRunning && s.quickBtnRunning]}
+              onPress={handleImanSeed}
+              disabled={imanRunning}
+              activeOpacity={0.85}
+            >
+              {imanRunning ? (
+                <>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={s.quickBtnTxt}>உருவாக்குகிறது...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="rocket-outline" size={18} color="#fff" />
+                  <Text style={s.quickBtnTxt}>ஒரே click-ல் 16 ஈமான் Cards உருவாக்கு</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {imanError && (
+            <View style={s.quickErrBox}>
+              <Ionicons name="alert-circle" size={18} color={C.red} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.quickErrTitle}>பிழை ஏற்பட்டது</Text>
+                <Text style={s.quickErrMsg}>{imanError}</Text>
+                <Text style={s.quickErrHint}>
+                  Firebase CMS-ல் "Fundamental of iman" category மற்றும் "ஈமானின் கடமைகள்" subcategory உருவாக்கியுள்ளீர்களா என்று சரிபார்க்கவும்.
+                </Text>
+              </View>
+              <Pressable onPress={() => setImanError(null)} hitSlop={8}>
+                <Ionicons name="refresh" size={20} color={C.red} />
+              </Pressable>
+            </View>
+          )}
+
+          {imanResult && (
+            <View style={s.quickResultBox}>
+              <View style={s.quickResultHeader}>
+                <Ionicons name="checkmark-circle" size={22} color={C.valid} />
+                <Text style={s.quickResultTitle}>
+                  {imanResult.created.length === 0
+                    ? "எல்லாம் ஏற்கனவே உள்ளன"
+                    : `${imanResult.created.length} ஈமான் Cards உருவாக்கப்பட்டன!`}
+                </Text>
+              </View>
+              <View style={s.quickIdRow}>
+                <Text style={s.quickIdLabel}>Category ID:</Text>
+                <Text style={s.quickIdVal} numberOfLines={1}>{imanResult.categoryId}</Text>
+              </View>
+              <View style={s.quickIdRow}>
+                <Text style={s.quickIdLabel}>Subcategory ID:</Text>
+                <Text style={s.quickIdVal} numberOfLines={1}>{imanResult.subcategoryId}</Text>
+              </View>
+              {imanResult.created.length > 0 && (
+                <View style={s.quickListBlock}>
+                  <Text style={s.quickListLabel}>✅ உருவாக்கப்பட்டவை ({imanResult.created.length})</Text>
+                  {imanResult.created.map((t, i) => (
+                    <Text key={i} style={[s.quickListItem, { color: C.valid }]}>• {t}</Text>
+                  ))}
+                </View>
+              )}
+              {imanResult.skipped.length > 0 && (
+                <View style={s.quickListBlock}>
+                  <Text style={s.quickListLabel}>⏭ Skip ஆனவை ({imanResult.skipped.length})</Text>
+                  {imanResult.skipped.map((t, i) => (
+                    <Text key={i} style={[s.quickListItem, { color: C.sub }]}>• {t}</Text>
+                  ))}
+                </View>
+              )}
+              {imanResult.errors.length > 0 && (
+                <View style={s.quickListBlock}>
+                  <Text style={s.quickListLabel}>❌ பிழை ({imanResult.errors.length})</Text>
+                  {imanResult.errors.map((e, i) => (
+                    <Text key={i} style={[s.quickListItem, { color: C.red }]}>• {e.titleEn}: {e.message}</Text>
+                  ))}
+                </View>
+              )}
+              <Pressable onPress={() => setImanResult(null)} style={s.quickResetLink} hitSlop={8}>
                 <Ionicons name="refresh-outline" size={14} color={C.sub} />
                 <Text style={s.quickResetTxt}>மீண்டும் இயக்கு</Text>
               </Pressable>

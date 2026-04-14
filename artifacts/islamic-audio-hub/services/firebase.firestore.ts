@@ -590,6 +590,181 @@ async function _seedHadithCards(categoryId: string): Promise<SeedResult> {
   return result;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// createImanCards()
+//
+// 1. Finds category  where nameEn = "Fundamental of iman"
+// 2. Finds subcategory where name = "ஈமானின் கடமைகள்"
+// 3. Checks existing cards in that subcategory to skip duplicates
+// 4. Creates 16 Iman cards (first 6 free, last 10 premium)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const IMAN_CARDS: Array<{ titleEn: string; titleTa: string; isPremium: boolean; sortOrder: number }> = [
+  { titleEn: "Roots of Iman",                        titleTa: "ஈமானின் வேர்கள்",                        isPremium: false, sortOrder: 1  },
+  { titleEn: "Tawheed ar-Ruboobiyyah",                titleTa: "தவ்ஹீதுர் ருபூபிய்யா",                   isPremium: false, sortOrder: 2  },
+  { titleEn: "Tawheed al-Uloohiyyah",                 titleTa: "தவ்ஹீதுல் உலூஹிய்யா",                    isPremium: false, sortOrder: 3  },
+  { titleEn: "Fortress of Tawheed",                   titleTa: "ஏகத்துவத்தின் அரண்",                     isPremium: false, sortOrder: 4  },
+  { titleEn: "Shirk and Rejection",                   titleTa: "இணைவைப்பு மற்றும் நிராகரிப்பு",          isPremium: false, sortOrder: 5  },
+  { titleEn: "Unseen Knowledge and Deception",        titleTa: "ஃகைப் மறைவான அறிவின் ரகசியம்",           isPremium: false, sortOrder: 6  },
+  { titleEn: "Belief in Angels",                      titleTa: "வானவர்கள் பற்றிய பாடம்",                  isPremium: true,  sortOrder: 7  },
+  { titleEn: "Belief in Books",                       titleTa: "வேதங்களின் மீதான ஈமான்",                  isPremium: true,  sortOrder: 8  },
+  { titleEn: "Belief in Prophets",                    titleTa: "நபிமார்கள் மீதான ஈமான்",                  isPremium: true,  sortOrder: 9  },
+  { titleEn: "Prophet Muhammad (SAW) Specialties",   titleTa: "முஹம்மது (ஸல்) அவர்களின் சிறப்புகள்",    isPremium: true,  sortOrder: 10 },
+  { titleEn: "Journey of Hereafter",                  titleTa: "மறுமைப் பயணம்",                          isPremium: true,  sortOrder: 11 },
+  { titleEn: "Divine Decree",                         titleTa: "இறைவிதி ரகசியம்",                        isPremium: true,  sortOrder: 12 },
+  { titleEn: "Three Levels of Deen",                  titleTa: "மார்க்கத்தின் மூன்று நிலைகள்",            isPremium: true,  sortOrder: 13 },
+  { titleEn: "Al Wala Wal Bara",                      titleTa: "அல் வலா வல் பரா",                        isPremium: true,  sortOrder: 14 },
+  { titleEn: "Companions Virtues",                    titleTa: "நபித்தோழர்களின் மாண்பு",                  isPremium: true,  sortOrder: 15 },
+  { titleEn: "Following Quran & Sunnah",              titleTa: "குர்ஆன் & சுன்னா பின்பற்றுதல்",          isPremium: true,  sortOrder: 16 },
+];
+
+export async function createImanCards(): Promise<SeedResult> {
+  console.log("[Seeder] ── createImanCards() started ────────────────────────");
+
+  // ── Step 1: Find category where nameEn = "Fundamental of iman" ────────────
+  console.log('[Seeder] Step 1: Looking for category nameEn = "Fundamental of iman"...');
+
+  const catSnap = await getDocs(
+    query(collection(db, "categories"), where("nameEn", "==", "Fundamental of iman"))
+  );
+
+  let categoryId: string;
+
+  if (catSnap.empty) {
+    console.warn('[Seeder] nameEn exact match not found, trying case-insensitive fallback...');
+    // Try partial match via name field
+    const catSnap2 = await getDocs(
+      query(collection(db, "categories"), where("name", "==", "Fundamental of iman"))
+    );
+    if (catSnap2.empty) {
+      throw new Error(
+        'Category "Fundamental of iman" not found. ' +
+        'Check that the category exists in Firestore with nameEn = "Fundamental of iman".'
+      );
+    }
+    categoryId = catSnap2.docs[0].id;
+    console.log(`[Seeder] ✅ Category found via name field: id=${categoryId}`);
+  } else {
+    categoryId = catSnap.docs[0].id;
+    console.log(`[Seeder] ✅ Category found: id=${categoryId}, nameEn=${catSnap.docs[0].data().nameEn}`);
+  }
+
+  return _seedImanCards(categoryId);
+}
+
+async function _seedImanCards(categoryId: string): Promise<SeedResult> {
+  const result: SeedResult = {
+    categoryId,
+    subcategoryId: "",
+    created: [],
+    skipped: [],
+    errors:  [],
+  };
+
+  // ── Step 2: Find subcategory where name = "ஈமானின் கடமைகள்" ───────────────
+  console.log('[Seeder] Step 2: Looking for subcategory name = "ஈமானின் கடமைகள்"...');
+
+  const subSnap = await getDocs(
+    query(
+      collection(db, "subcategories"),
+      where("categoryId", "==", categoryId),
+      where("name", "==", "ஈமானின் கடமைகள்")
+    )
+  );
+
+  if (subSnap.empty) {
+    // Fallback: search without categoryId filter in case it was stored differently
+    console.warn('[Seeder] "ஈமானின் கடமைகள்" not found with categoryId filter, trying global search...');
+    const subSnap2 = await getDocs(
+      query(
+        collection(db, "subcategories"),
+        where("name", "==", "ஈமானின் கடமைகள்")
+      )
+    );
+    if (subSnap2.empty) {
+      throw new Error(
+        '"ஈமானின் கடமைகள்" subcategory not found. ' +
+        'Create it first in the CMS under the "Fundamental of iman" category.'
+      );
+    }
+    result.subcategoryId = subSnap2.docs[0].id;
+    console.log(`[Seeder] ✅ Subcategory found (global): id=${result.subcategoryId}`);
+  } else {
+    result.subcategoryId = subSnap.docs[0].id;
+    console.log(`[Seeder] ✅ Subcategory found: id=${result.subcategoryId}, name=${subSnap.docs[0].data().name}`);
+  }
+
+  const subcategoryId = result.subcategoryId;
+
+  // ── Step 3: Fetch existing cards to detect duplicates ─────────────────────
+  console.log("[Seeder] Step 3: Checking existing cards for duplicates...");
+
+  const existingSnap = await getDocs(
+    query(collection(db, "cards"), where("subcategoryId", "==", subcategoryId))
+  );
+
+  const existingTitles = new Set<string>(
+    existingSnap.docs.map(d => ((d.data().titleEn as string) ?? "").toLowerCase().trim())
+  );
+
+  console.log(
+    `[Seeder] Found ${existingSnap.size} existing cards. ` +
+    `Existing titles: [${[...existingTitles].join(", ")}]`
+  );
+
+  // ── Step 4: Create missing cards ──────────────────────────────────────────
+  console.log("[Seeder] Step 4: Creating Iman cards...");
+
+  for (const card of IMAN_CARDS) {
+    const key = card.titleEn.toLowerCase().trim();
+
+    if (existingTitles.has(key)) {
+      console.log(`[Seeder]   ⏭ SKIP  — "${card.titleEn}" already exists`);
+      result.skipped.push(card.titleEn);
+      continue;
+    }
+
+    try {
+      const ref = await addDoc(collection(db, "cards"), {
+        categoryId,
+        subcategoryId,
+        titleEn:      card.titleEn,
+        titleTa:      card.titleTa,
+        audioUrl:     "",
+        duration:     0,
+        description:  "",
+        isPremium:    card.isPremium,
+        hasQuiz:      true,
+        viewCount:    0,
+        sortOrder:    card.sortOrder,
+        quiz:         [],
+        quizTitleTa:  "",
+        quizTitleEn:  "",
+        createdAt:    serverTimestamp(),
+      });
+
+      console.log(`[Seeder]   ✅ CREATED — "${card.titleEn}" (premium=${card.isPremium}) → docId: ${ref.id}`);
+      result.created.push(card.titleEn);
+      existingTitles.add(key);
+    } catch (err: any) {
+      const msg = err?.message ?? "Unknown error";
+      console.error(`[Seeder]   ❌ ERROR  — "${card.titleEn}": ${msg}`);
+      result.errors.push({ titleEn: card.titleEn, message: msg });
+    }
+  }
+
+  // ── Step 5: Summary ───────────────────────────────────────────────────────
+  console.log("[Seeder] ── Summary ─────────────────────────────────────────");
+  console.log(`[Seeder]   Category ID:    ${result.categoryId}`);
+  console.log(`[Seeder]   Subcategory ID: ${result.subcategoryId}`);
+  console.log(`[Seeder]   ✅ Created:  ${result.created.length} cards → [${result.created.join(", ")}]`);
+  console.log(`[Seeder]   ⏭ Skipped:  ${result.skipped.length} cards → [${result.skipped.join(", ")}]`);
+  console.log(`[Seeder]   ❌ Errors:   ${result.errors.length}`);
+  console.log("[Seeder] ── createImanCards() done ──────────────────────────");
+
+  return result;
+}
+
 // The 10 Surahs to seed
 const VIRIVURAI_SURAHS: Array<{ titleEn: string; titleTa: string; sortOrder: number }> = [
   { titleEn: "Al-Fatiha",  titleTa: "சூரா ஃபாத்திஹா",  sortOrder: 1  },

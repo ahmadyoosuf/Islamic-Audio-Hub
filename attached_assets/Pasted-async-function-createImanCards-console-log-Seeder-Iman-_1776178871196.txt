@@ -1,0 +1,78 @@
+async function createImanCards() {
+  console.log("[Seeder] Iman Cards creating...");
+
+  const db = firebase.firestore();
+
+  // 1. Find Category
+  const catSnap = await db.collection("categories")
+    .where("nameEn", "==", "Fundamental of iman")
+    .get();
+
+  if (catSnap.empty) {
+    console.log("❌ Category not found");
+    return;
+  }
+
+  const categoryId = catSnap.docs[0].id;
+
+  // 2. Find Subcategory
+  const subSnap = await db.collection("subcategories")
+    .where("nameTa", "==", "ஈமானின் கடமைகள்")
+    .get();
+
+  if (subSnap.empty) {
+    console.log("❌ Subcategory not found");
+    return;
+  }
+
+  const subcategoryId = subSnap.docs[0].id;
+
+  // 3. Cards Data
+  const cards = [
+    { ta: "ஈமானின் வேர்கள்", en: "Roots of Iman" },
+    { ta: "தவ்ஹீதுர் ருபூபிய்யா", en: "Tawheed ar-Ruboobiyyah" },
+    { ta: "தவ்ஹீதுல் உலூஹிய்யா", en: "Tawheed al-Uloohiyyah" },
+    { ta: "ஏகத்துவத்தின் அரண்", en: "Fortress of Tawheed" },
+    { ta: "இணைவைப்பு மற்றும் நிராகரிப்பு", en: "Shirk and Rejection" },
+    { ta: "ஃகைப் மறைவான அறிவின் ரகசியம்", en: "Unseen Knowledge and Deception" },
+    { ta: "வானவர்கள் பற்றிய பாடம்", en: "Belief in Angels", premium: true },
+    { ta: "வேதங்களின் மீதான ஈமான்", en: "Belief in Books", premium: true },
+    { ta: "நபிமார்கள் மீதான ஈமான்", en: "Belief in Prophets", premium: true },
+    { ta: "முஹம்மது (ஸல்) அவர்களின் சிறப்புகள்", en: "Prophet Muhammad (SAW) Specialties", premium: true },
+    { ta: "மறுமைப் பயணம்", en: "Journey of Hereafter", premium: true },
+    { ta: "இறைவிதி ரகசியம்", en: "Divine Decree", premium: true },
+    { ta: "மார்க்கத்தின் மூன்று நிலைகள்", en: "Three Levels of Deen", premium: true },
+    { ta: "அல் வலா வல் பரா", en: "Al Wala Wal Bara", premium: true },
+    { ta: "நபித்தோழர்களின் மாண்பு", en: "Companions Virtues", premium: true },
+    { ta: "குர்ஆன் & சுன்னா பின்பற்றுதல்", en: "Following Quran & Sunnah", premium: true },
+  ];
+
+  // 4. Create Cards
+  let created = 0;
+
+  for (let i = 0; i < cards.length; i++) {
+    const c = cards[i];
+
+    await db.collection("cards").add({
+      titleTa: c.ta,
+      titleEn: c.en,
+      categoryId,
+      subcategoryId,
+      audioUrl: "",
+      hasQuiz: true,
+      quiz: [],
+      quizTitleTa: "",
+      quizTitleEn: "",
+      duration: 0,
+      isPremium: c.premium || false,
+      viewCount: 0,
+      sortOrder: i + 1,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    console.log(`✅ Created: ${c.en}`);
+    created++;
+  }
+
+  console.log(`🎉 Done: ${created} cards created`);
+}

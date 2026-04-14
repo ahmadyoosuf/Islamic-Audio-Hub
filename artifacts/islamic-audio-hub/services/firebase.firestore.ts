@@ -58,6 +58,8 @@ export interface FBCard {
   viewCount:     number;
   sortOrder:     number;
   quiz:          FBQuizQuestion[];
+  quizTitleTa:   string;
+  quizTitleEn:   string;
   createdAt:     number;
 }
 
@@ -113,6 +115,8 @@ function toFBCard(id: string, data: Record<string, any>): FBCard {
     viewCount:     data.viewCount      ?? 0,
     sortOrder:     data.sortOrder      ?? 0,
     quiz:          Array.isArray(data.quiz) ? data.quiz : [],
+    quizTitleTa:   data.quizTitleTa   ?? "",
+    quizTitleEn:   data.quizTitleEn   ?? "",
     createdAt:     tsToMs(data.createdAt),
   };
 }

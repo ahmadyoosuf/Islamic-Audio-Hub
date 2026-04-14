@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import AudioPlayer from "@/components/AudioPlayer";
+import QuizModal from "@/components/QuizModal";
 import { useAudio } from "@/context/AudioContext";
 import type { Track } from "@/context/AppContext";
 import {
@@ -45,9 +46,10 @@ function fbCardToTrack(c: FBCard, categoryName: string): Track {
 // ─── Bilingual Card Row ───────────────────────────────────────────────────────
 
 function CardRow({
-  card, index, playlist, color, anim,
+  card, index, playlist, color, anim, onShowQuiz,
 }: {
-  card: FBCard; index: number; playlist: Track[]; color: string; anim: Animated.Value;
+  card: FBCard; index: number; playlist: Track[]; color: string;
+  anim: Animated.Value; onShowQuiz: (card: FBCard) => void;
 }) {
   const { playTrack, currentTrack, isPlaying } = useAudio();
   const router = useRouter();
@@ -112,29 +114,38 @@ function CardRow({
                   <Text style={styles.metaTxt}>{Math.floor(card.duration / 60)} நிமிடம்</Text>
                 </>
               )}
-              {card.hasQuiz && (
-                <View style={[styles.quizBadge, { backgroundColor: color + "33" }]}>
-                  <Text style={[styles.quizBadgeTxt, { color }]}>QUIZ</Text>
-                </View>
-              )}
               {isActive && isPlaying && (
                 <Text style={[styles.nowPlaying, { color }]}>● கேட்கிறது</Text>
               )}
             </View>
           </View>
 
-          {/* Play button */}
-          <TouchableOpacity
-            onPress={handlePlay}
-            style={[styles.playBtn, { backgroundColor: isActive && isPlaying ? color : color + "33" }]}
-            activeOpacity={0.75}
-          >
-            <Ionicons
-              name={isActive && isPlaying ? "pause" : "play"}
-              size={18}
-              color={isActive && isPlaying ? "#fff" : color}
-            />
-          </TouchableOpacity>
+          {/* Right-side buttons */}
+          <View style={styles.rightBtns}>
+            {/* Quiz button — shown only when card has quiz */}
+            {card.hasQuiz && (
+              <TouchableOpacity
+                onPress={(e) => { e.stopPropagation?.(); onShowQuiz(card); }}
+                style={[styles.quizBtn, { backgroundColor: color + "25", borderColor: color + "66" }]}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="help-circle" size={14} color={color} />
+                <Text style={[styles.quizBtnTxt, { color }]}>Quiz</Text>
+              </TouchableOpacity>
+            )}
+            {/* Play button */}
+            <TouchableOpacity
+              onPress={handlePlay}
+              style={[styles.playBtn, { backgroundColor: isActive && isPlaying ? color : color + "33" }]}
+              activeOpacity={0.75}
+            >
+              <Ionicons
+                name={isActive && isPlaying ? "pause" : "play"}
+                size={18}
+                color={isActive && isPlaying ? "#fff" : color}
+              />
+            </TouchableOpacity>
+          </View>
         </Animated.View>
       </Pressable>
     </Animated.View>
@@ -198,6 +209,9 @@ export default function SubcategoryScreen() {
   const { cards, loading: cardsLoading } = useCards(id ?? "");
 
   const loading = subLoading || cardsLoading;
+
+  // ── Quiz state ────────────────────────────────────────────────────────────
+  const [quizCard, setQuizCard] = useState<FBCard | null>(null);
 
   // Convert to Track[] for playlist
   const categoryName = category?.name ?? "";
@@ -315,6 +329,7 @@ export default function SubcategoryScreen() {
                 playlist={playlist}
                 color={color}
                 anim={cardAnims[i] ?? new Animated.Value(1)}
+                onShowQuiz={setQuizCard}
               />
             ))}
 
@@ -337,6 +352,17 @@ export default function SubcategoryScreen() {
 
         <AudioPlayer />
       </SafeAreaView>
+
+      {/* ── Quiz Modal (shown when user taps Quiz on a card) ── */}
+      {quizCard && (
+        <QuizModal
+          visible={!!quizCard}
+          onClose={() => setQuizCard(null)}
+          trackId={quizCard.id}
+          trackTitle={quizCard.titleTa || quizCard.titleEn}
+          firestoreQuestions={quizCard.quiz}
+        />
+      )}
     </View>
   );
 }
@@ -403,11 +429,18 @@ const styles = StyleSheet.create({
   metaRow:    { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
   metaTxt:    { fontSize: 10, color: "#777" },
 
-  quizBadge: {
-    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
+  nowPlaying: { fontSize: 10, fontWeight: "700" },
+
+  rightBtns: {
+    flexDirection: "row", alignItems: "center", gap: 6, flexShrink: 0,
   },
-  quizBadgeTxt: { fontSize: 9, fontWeight: "800" },
-  nowPlaying:   { fontSize: 10, fontWeight: "700" },
+
+  quizBtn: {
+    flexDirection: "row", alignItems: "center", gap: 3,
+    paddingHorizontal: 8, paddingVertical: 6,
+    borderRadius: 10, borderWidth: 1,
+  },
+  quizBtnTxt: { fontSize: 10, fontWeight: "800" },
 
   playBtn: {
     width: 40, height: 40, borderRadius: 20,

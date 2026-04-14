@@ -26,6 +26,7 @@ import {
   type LevelResult,
   type TrackQuizProgress,
 } from "@/data/quizProgress";
+import type { FBQuizQuestion } from "@/services/firebase.firestore";
 
 const VOICE_MODE_KEY = "quiz_voice_mode_v1";
 
@@ -60,6 +61,9 @@ interface QuizModalProps {
   trackTitle: string;
   categoryId?: string;
   prizeEnabled?: boolean;
+  /** Pre-loaded questions from Firestore (FBCard.quiz). When provided,
+   *  AsyncStorage lookup is skipped entirely. */
+  firestoreQuestions?: FBQuizQuestion[];
 }
 
 // ─── Audio helpers ───────────────────────────────────────────────────────────
@@ -143,6 +147,7 @@ export default function QuizModal({
   onClose,
   trackId,
   trackTitle,
+  firestoreQuestions,
 }: QuizModalProps) {
   const insets = useSafeAreaInsets();
   const { isDarkMode } = useApp();
@@ -249,13 +254,31 @@ export default function QuizModal({
     setScore(0);
     setStreak(0);
     stopSpeech();
-    Promise.all([getQuizzesByTrack(trackId), getQuizProgress(trackId)]).then(
-      ([qs, prog]) => {
-        setQuestions(qs);
+
+    if (firestoreQuestions) {
+      // Use pre-loaded Firestore questions — map to same shape QuizModal needs
+      const mapped = firestoreQuestions.map((q, i) => ({
+        id:           `fb_${trackId}_${i}`,
+        trackId,
+        categoryId:   "",
+        addedAt:      0,
+        question:     q.question,
+        options:      q.options,
+        correctIndex: q.correctIndex,
+      }));
+      getQuizProgress(trackId).then(prog => {
+        setQuestions(mapped);
         setProgress(prog);
-      },
-    );
-  }, [visible, trackId]);
+      });
+    } else {
+      Promise.all([getQuizzesByTrack(trackId), getQuizProgress(trackId)]).then(
+        ([qs, prog]) => {
+          setQuestions(qs);
+          setProgress(prog);
+        },
+      );
+    }
+  }, [visible, trackId, firestoreQuestions]);
 
   // Stop speech when leaving playing phase
   useEffect(() => {

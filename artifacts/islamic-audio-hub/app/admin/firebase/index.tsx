@@ -522,7 +522,21 @@ function CardManager() {
             <View style={{ flex: 1 }}>
               <Text style={s.rowMain} numberOfLines={1}>{card.titleTa || card.titleEn}</Text>
               <Text style={s.rowSub}>{catName(card.categoryId)} › {subName(card.subcategoryId)}</Text>
+              {card.hasQuiz && (
+                <View style={s.quizPill}>
+                  <Ionicons name="help-circle" size={11} color={C.green} />
+                  <Text style={s.quizPillTxt}>{(card.quiz ?? []).length} கேள்விகள்</Text>
+                </View>
+              )}
             </View>
+            {/* Quiz editor button */}
+            <Pressable
+              onPress={() => router.push(`/admin/firebase/quiz/${card.id}` as any)}
+              style={[s.iconBtn, { backgroundColor: "#e8f5ee", borderColor: C.green + "55" }]}
+              hitSlop={10}
+            >
+              <Ionicons name="help-circle-outline" size={16} color={C.green} />
+            </Pressable>
             <Pressable
               onPress={() => {
                 setEditId(card.id);
@@ -632,4 +646,6 @@ const s = StyleSheet.create({
   rowSub:      { fontSize: 11, color: C.sub, marginTop: 2 },
   colorDot:    { width: 14, height: 14, borderRadius: 7 },
   iconBtn:     { width: 32, height: 32, borderRadius: 8, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center" },
+  quizPill:    { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
+  quizPillTxt: { fontSize: 10, color: C.green, fontWeight: "700" },
 });

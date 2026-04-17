@@ -1,5 +1,4 @@
-import * as Device from "expo-device";
-import * as Notifications from "expo-notifications";
+import { Audio } from "expo-av";
 import { useRouter, useFocusEffect } from "expo-router";
 import React, { useRef, useState, useCallback, useEffect } from "react";
 import {
@@ -200,50 +199,50 @@ export default function HomeScreen() {
   const { categories: fbCats, loading: fbCatsLoading, error: fbCatError } = useCategories();
   const { cards: fbCards } = useAllCards();
 
-  const [search,      setSearch]      = useState("");
-  const [menuOpen,    setMenuOpen]    = useState(false);
-  const [notifStatus, setNotifStatus] = useState<"idle"|"loading"|"enabled"|"denied">("idle");
+  const [search,        setSearch]        = useState("");
+  const [menuOpen,      setMenuOpen]      = useState(false);
+  const [audioPlaying,  setAudioPlaying]  = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
 
-  // ── equivalent to DOMContentLoaded — runs once after component is rendered ──
-  useEffect(() => {
-    // Check if permission was already granted on a previous visit
-    Notifications.getPermissionsAsync().then(({ status }) => {
-      if (status === "granted") setNotifStatus("enabled");
-    });
-  }, []);
-
-  // ── enableNotifications — called when button is pressed ────────────────────
-  async function enableNotifications() {
-    console.log("Button clicked");
-    console.log("Notifications enabled");
-    if (!Device.isDevice) {
-      console.log("[Notifications] Must use a physical device");
-      return;
-    }
-    setNotifStatus("loading");
+  // ── Play Audio demo ─────────────────────────────────────────────────────────
+  async function playDemoAudio() {
     try {
-      const { status: existing } = await Notifications.getPermissionsAsync();
-      let final = existing;
-
-      if (existing !== "granted") {
-        const { status } = await Notifications.requestPermissionsAsync();
-        final = status;
-      }
-
-      if (final !== "granted") {
-        console.log("[Notifications] Permission denied");
-        setNotifStatus("denied");
+      if (audioPlaying && soundRef.current) {
+        await soundRef.current.stopAsync();
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+        setAudioPlaying(false);
         return;
       }
-
-      const token = (await Notifications.getExpoPushTokenAsync()).data;
-      console.log("[Notifications] Token:", token);
-      setNotifStatus("enabled");
+      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
+        { shouldPlay: true }
+      );
+      soundRef.current = sound;
+      setAudioPlaying(true);
+      sound.setOnPlaybackStatusUpdate(status => {
+        if ("didJustFinish" in status && status.didJustFinish) {
+          setAudioPlaying(false);
+          soundRef.current = null;
+        }
+      });
     } catch (err) {
-      console.error("[Notifications] Error:", err);
-      setNotifStatus("idle");
+      console.error("[Audio] playback error:", err);
+      setAudioPlaying(false);
     }
   }
+
+  // Unload audio when leaving screen
+  useFocusEffect(
+    useCallback(() => {
+      return () => {
+        soundRef.current?.unloadAsync();
+        soundRef.current = null;
+        setAudioPlaying(false);
+      };
+    }, [])
+  );
 
   // Staggered card animation refs
   const cardAnims = useRef<Animated.Value[]>([]).current;
@@ -368,32 +367,21 @@ export default function HomeScreen() {
         {/* Bismillah */}
         <BismillahBanner isDark={isDark} />
 
-        {/* ── 🔔 Enable Notifications button ─────────────────────────────────
-            nativeID="enableNotifications" is the React Native equivalent of
-            id="enableNotifications" in HTML.
-            onPress={getUserToken} replaces addEventListener("click", getUserToken).
-            useEffect above replaces document.addEventListener("DOMContentLoaded").
-        ──────────────────────────────────────────────────────────────────── */}
-        {notifStatus !== "enabled" && (
-          <TouchableOpacity
-            nativeID="enableNotifications"
-            onPress={enableNotifications}
-            disabled={notifStatus === "loading"}
-            activeOpacity={0.82}
-            style={[
-              styles.notifBtn,
-              notifStatus === "denied"  && styles.notifBtnDenied,
-              notifStatus === "loading" && styles.notifBtnLoading,
-              { borderColor: isDark ? "#1e4a2e" : "#b8ddc0" },
-            ]}
-          >
-            <Text style={styles.notifBtnTxt}>
-              {notifStatus === "loading" ? "⏳ Enabling..."
-               : notifStatus === "denied"  ? "🚫 Notifications Blocked"
-               : "Enable Notifications"}
-            </Text>
-          </TouchableOpacity>
-        )}
+        {/* ── Play Audio demo button ─────────────────────────────────────── */}
+        <TouchableOpacity
+          nativeID="playAudio"
+          onPress={playDemoAudio}
+          activeOpacity={0.82}
+          style={[
+            styles.audioBtn,
+            { backgroundColor: audioPlaying ? C.goldBright : C.green },
+          ]}
+        >
+          <Ionicons name={audioPlaying ? "pause" : "play"} size={18} color="#fff" />
+          <Text style={styles.audioBtnTxt}>
+            {audioPlaying ? "⏸ Stop Audio" : "▶ Play Audio"}
+          </Text>
+        </TouchableOpacity>
 
         {/* Firebase error banner — shown only when Firestore is blocked */}
         {fbCatError && fbCats.length === 0 && (
@@ -592,16 +580,13 @@ const styles = StyleSheet.create({
   },
   sectionBadgeTxt: { fontSize: 12, fontWeight: "800" },
 
-  // 🔔 Notification button — equivalent to <button id="enableNotifications">
-  notifBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    backgroundColor: "#1a7a4a", borderWidth: 1,
+  // Play Audio button
+  audioBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     borderRadius: 12, paddingVertical: 13, paddingHorizontal: 20,
     marginBottom: 14,
   },
-  notifBtnDenied:  { backgroundColor: "#6b7280" },
-  notifBtnLoading: { backgroundColor: "#5a9a6a" },
-  notifBtnTxt: {
+  audioBtnTxt: {
     color: "#fff", fontSize: 15, fontWeight: "700", letterSpacing: 0.2,
   },
 

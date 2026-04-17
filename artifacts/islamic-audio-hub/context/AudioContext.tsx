@@ -38,9 +38,8 @@ const RATES = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
 
 export function AudioProvider({ children }: { children: React.ReactNode }) {
   const soundRef = useRef<Audio.Sound | null>(null);
-  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(
-    null,
-  );
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const loadLockRef = useRef(false); // prevents overlapping playTrack calls
   const { saveProgress, getProgress, addRecentTrack } = useApp();
 
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
@@ -65,12 +64,17 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const cleanup = async () => {
+    // Stop progress timer first
     if (progressIntervalRef.current) {
       clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
     }
+    // Always stop THEN unload — prevents two sounds playing at once
     if (soundRef.current) {
-      await soundRef.current.unloadAsync();
-      soundRef.current = null;
+      const prev = soundRef.current;
+      soundRef.current = null; // null out immediately so no other caller reuses it
+      try { await prev.stopAsync(); } catch (_) {}
+      try { await prev.unloadAsync(); } catch (_) {}
     }
   };
 
@@ -95,6 +99,10 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
 
   const playTrack = useCallback(
     async (track: Track, newPlaylist?: Track[]) => {
+      // Prevent a second tap from starting a second load while first is in progress
+      if (loadLockRef.current) return;
+      loadLockRef.current = true;
+
       setIsLoading(true);
       setCurrentTrack(track);
       if (newPlaylist) setPlaylist(newPlaylist);
@@ -131,6 +139,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         setIsPlaying(false);
       } finally {
         setIsLoading(false);
+        loadLockRef.current = false; // release lock so next track can load
       }
     },
     [playbackRate, getProgress, startProgressTracking, addRecentTrack],

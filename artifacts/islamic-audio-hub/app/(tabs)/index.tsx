@@ -1,6 +1,5 @@
-import { Audio } from "expo-av";
-import { useRouter, useFocusEffect } from "expo-router";
-import React, { useRef, useState, useCallback, useEffect } from "react";
+import { useRouter } from "expo-router";
+import React, { useRef, useState, useEffect } from "react";
 import {
   Animated,
   Dimensions,
@@ -199,50 +198,32 @@ export default function HomeScreen() {
   const { categories: fbCats, loading: fbCatsLoading, error: fbCatError } = useCategories();
   const { cards: fbCards } = useAllCards();
 
-  const [search,        setSearch]        = useState("");
-  const [menuOpen,      setMenuOpen]      = useState(false);
-  const [audioPlaying,  setAudioPlaying]  = useState(false);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const [search,   setSearch]   = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // ── Play Audio demo ─────────────────────────────────────────────────────────
-  async function playDemoAudio() {
-    try {
-      if (audioPlaying && soundRef.current) {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-        soundRef.current = null;
-        setAudioPlaying(false);
-        return;
-      }
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
-      const { sound } = await Audio.Sound.createAsync(
-        { uri: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
-        { shouldPlay: true }
-      );
-      soundRef.current = sound;
-      setAudioPlaying(true);
-      sound.setOnPlaybackStatusUpdate(status => {
-        if ("didJustFinish" in status && status.didJustFinish) {
-          setAudioPlaying(false);
-          soundRef.current = null;
-        }
-      });
-    } catch (err) {
-      console.error("[Audio] playback error:", err);
-      setAudioPlaying(false);
+  // Use the SINGLE global audio player — no local sound instances
+  const { playTrack: globalPlay, togglePlay, isPlaying, currentTrack } = useAudio();
+
+  // Demo play: routes through the global AudioContext so it stops any current audio
+  const DEMO_TRACK = {
+    id: "__demo__",
+    title: "Demo Audio",
+    categoryId: "",
+    categoryName: "Sample",
+    duration: 0,
+    audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+    viewCount: 0,
+    isPremium: false,
+    sortOrder: 0,
+  };
+
+  function handlePlayAudio() {
+    if (currentTrack?.id === "__demo__") {
+      togglePlay(); // already loaded — just pause/resume
+    } else {
+      globalPlay(DEMO_TRACK); // stops whatever is playing, then loads demo
     }
   }
-
-  // Unload audio when leaving screen
-  useFocusEffect(
-    useCallback(() => {
-      return () => {
-        soundRef.current?.unloadAsync();
-        soundRef.current = null;
-        setAudioPlaying(false);
-      };
-    }, [])
-  );
 
   // Staggered card animation refs
   const cardAnims = useRef<Animated.Value[]>([]).current;
@@ -367,21 +348,24 @@ export default function HomeScreen() {
         {/* Bismillah */}
         <BismillahBanner isDark={isDark} />
 
-        {/* ── Play Audio demo button ─────────────────────────────────────── */}
-        <TouchableOpacity
-          nativeID="playAudio"
-          onPress={playDemoAudio}
-          activeOpacity={0.82}
-          style={[
-            styles.audioBtn,
-            { backgroundColor: audioPlaying ? C.goldBright : C.green },
-          ]}
-        >
-          <Ionicons name={audioPlaying ? "pause" : "play"} size={18} color="#fff" />
-          <Text style={styles.audioBtnTxt}>
-            {audioPlaying ? "⏸ Stop Audio" : "▶ Play Audio"}
-          </Text>
-        </TouchableOpacity>
+        {/* ── Play Audio demo — routed through global AudioContext ─────── */}
+        {(() => {
+          const isDemoActive = currentTrack?.id === "__demo__";
+          const isDemo = isDemoActive && isPlaying;
+          return (
+            <TouchableOpacity
+              nativeID="playAudio"
+              onPress={handlePlayAudio}
+              activeOpacity={0.82}
+              style={[styles.audioBtn, { backgroundColor: isDemo ? C.goldBright : C.green }]}
+            >
+              <Ionicons name={isDemo ? "pause" : "play"} size={18} color="#fff" />
+              <Text style={styles.audioBtnTxt}>
+                {isDemo ? "⏸ Pause Audio" : "▶ Play Audio"}
+              </Text>
+            </TouchableOpacity>
+          );
+        })()}
 
         {/* Firebase error banner — shown only when Firestore is blocked */}
         {fbCatError && fbCats.length === 0 && (

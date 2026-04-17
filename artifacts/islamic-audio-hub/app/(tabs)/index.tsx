@@ -215,6 +215,7 @@ export default function HomeScreen() {
   // ── enableNotifications — called when button is pressed ────────────────────
   async function enableNotifications() {
     console.log("Button clicked");
+    console.log("Notifications enabled");
     if (!Device.isDevice) {
       console.log("[Notifications] Must use a physical device");
       return;

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -299,18 +300,25 @@ function SubcategoryManager() {
 
 function CardManager() {
   const router = useRouter();
-  const [cats,      setCats]      = useState<FBCategory[]>([]);
-  const [subs,      setSubs]      = useState<FBSubcategory[]>([]);
-  const [cards,     setCards]     = useState<FBCard[]>([]);
-  const [loading,   setLoading]   = useState(true);
-  const [saving,    setSaving]    = useState(false);
-  const [uploading,    setUploading]    = useState(false);
-  const [uploadPhase,  setUploadPhase]  = useState<"reading" | "uploading">("reading");
+  const [cats,        setCats]        = useState<FBCategory[]>([]);
+  const [subs,        setSubs]        = useState<FBSubcategory[]>([]);
+  const [cards,       setCards]       = useState<FBCard[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [saving,      setSaving]      = useState(false);
+  const [uploading,   setUploading]   = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<"reading" | "uploading">("reading");
+  const [showTypeModal, setShowTypeModal] = useState(false); // type-selection modal
+  const [showForm,      setShowForm]      = useState(false); // single-card form visible
   const [form, setForm] = useState({
     categoryId: "", subcategoryId: "",
     titleTa: "", titleEn: "", audioUrl: "", description: "",
   });
   const [editId, setEditId] = useState<string | null>(null);
+
+  function openAddCard() { setShowTypeModal(true); }
+  function closeTypeModal() { setShowTypeModal(false); }
+  function chooseSingle() { setShowTypeModal(false); setShowForm(true); }
+  function chooseBulk()   { setShowTypeModal(false); router.push("/admin/firebase/bulk-create" as any); }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -395,6 +403,7 @@ function CardManager() {
       if (editId) await updateCard(editId, payload);
       else        await addCard(payload);
       setEditId(null);
+      setShowForm(false);
       setForm({ categoryId: "", subcategoryId: "", titleTa: "", titleEn: "", audioUrl: "", description: "" });
       await load();
     } catch (e: any) { Alert.alert("பிழை", e.message); }
@@ -417,7 +426,53 @@ function CardManager() {
 
   return (
     <ScrollView contentContainerStyle={s.mgr} showsVerticalScrollIndicator={false}>
-      {/* Form */}
+
+      {/* ── Type-selection modal ── */}
+      <Modal visible={showTypeModal} transparent animationType="fade" onRequestClose={closeTypeModal}>
+        <Pressable style={s.modalOverlay} onPress={closeTypeModal}>
+          <Pressable style={s.modalBox} onPress={e => e.stopPropagation()}>
+            <Text style={s.modalTitle}>Card சேர்க்கும் முறை</Text>
+            <Text style={s.modalSub}>எந்த முறையில் Card சேர்க்க விரும்புகிறீர்கள்?</Text>
+
+            <TouchableOpacity style={s.typeCard} onPress={chooseSingle} activeOpacity={0.8}>
+              <View style={[s.typeIcon, { backgroundColor: "#e8f5ee" }]}>
+                <Ionicons name="create-outline" size={26} color={C.green} />
+              </View>
+              <View style={s.typeInfo}>
+                <Text style={s.typeTitle}>Single Card</Text>
+                <Text style={s.typeSub}>ஒரே ஒரு Card-ஐ படிவம் மூலம் சேர்க்கவும்</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={C.sub} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[s.typeCard, { borderColor: "#f0bc4244" }]} onPress={chooseBulk} activeOpacity={0.8}>
+              <View style={[s.typeIcon, { backgroundColor: "#fff8e6" }]}>
+                <Ionicons name="layers-outline" size={26} color={C.gold} />
+              </View>
+              <View style={s.typeInfo}>
+                <Text style={s.typeTitle}>Bulk Card Upload</Text>
+                <Text style={s.typeSub}>பல Cards-ஐ ஒரே நேரத்தில் CSV / paste மூலம் சேர்க்கவும்</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={C.sub} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={s.modalCancel} onPress={closeTypeModal}>
+              <Text style={s.modalCancelTxt}>ரத்து</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* ── Add Card trigger button (hidden while form/edit is open) ── */}
+      {!showForm && !editId && (
+        <TouchableOpacity style={[s.btn, s.btnGreen, { marginBottom: 16 }]} onPress={openAddCard} activeOpacity={0.85}>
+          <Ionicons name="add-circle-outline" size={18} color="#fff" />
+          <Text style={s.btnTxt}>+ Add Card</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* ── Single card form (shown after choosing "Single Card") ── */}
+      {(showForm || editId) && (
       <View style={s.formCard}>
         <Text style={s.formTitle}>{editId ? "✏️ Card திருத்து" : "➕ புதிய Card சேர்"}</Text>
 
@@ -495,11 +550,9 @@ function CardManager() {
         <Field label="அல்லது URL ஒட்டு" value={form.audioUrl} onChangeText={v => setForm(f => ({ ...f, audioUrl: v }))} placeholder="https://..." />
 
         <View style={s.formBtns}>
-          {editId && (
-            <TouchableOpacity style={[s.btn, s.btnGray]} onPress={() => { setEditId(null); setForm({ categoryId: "", subcategoryId: "", titleTa: "", titleEn: "", audioUrl: "", description: "" }); }}>
-              <Text style={s.btnTxt}>ரத்து</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity style={[s.btn, s.btnGray]} onPress={() => { setEditId(null); setShowForm(false); setForm({ categoryId: "", subcategoryId: "", titleTa: "", titleEn: "", audioUrl: "", description: "" }); }}>
+            <Text style={s.btnTxt}>ரத்து</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={[s.btn, s.btnGreen, { flex: 1 }]} onPress={save} disabled={saving}>
             {saving ? <ActivityIndicator size="small" color="#fff" /> : (
               <Text style={s.btnTxt}>{editId ? "சேமி" : "➕ Card சேர்"}</Text>
@@ -507,6 +560,7 @@ function CardManager() {
           </TouchableOpacity>
         </View>
       </View>
+      )}
 
       {/* Card list */}
       <Text style={s.listTitle}>Cards ({cards.length})</Text>
@@ -541,6 +595,7 @@ function CardManager() {
             <Pressable
               onPress={() => {
                 setEditId(card.id);
+                setShowForm(true);
                 setForm({ categoryId: card.categoryId, subcategoryId: card.subcategoryId, titleTa: card.titleTa, titleEn: card.titleEn, audioUrl: card.audioUrl, description: card.description });
               }}
               style={s.iconBtn} hitSlop={10}
@@ -581,14 +636,6 @@ export default function FirebaseAdminScreen() {
           <Text style={s.headerTitle}>🔥 Firebase CMS</Text>
           <Text style={s.headerSub}>categories → subcategories → cards</Text>
         </View>
-        <Pressable
-          onPress={() => router.push("/admin/firebase/bulk-create" as any)}
-          style={s.bulkBtn}
-          hitSlop={8}
-        >
-          <Ionicons name="layers-outline" size={15} color="#fff" />
-          <Text style={s.bulkBtnTxt}>Bulk</Text>
-        </Pressable>
       </View>
 
       {/* Tabs */}
@@ -658,6 +705,18 @@ const s = StyleSheet.create({
   quizPill:    { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
   quizPillTxt: { fontSize: 10, color: C.green, fontWeight: "700" },
 
-  bulkBtn:     { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: C.green, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
-  bulkBtnTxt:  { color: "#fff", fontSize: 12, fontWeight: "800" },
+  // ── Type-selection modal ──────────────────────────────────────────────────
+  modalOverlay: { flex: 1, backgroundColor: "#00000066", justifyContent: "center", alignItems: "center", padding: 24 },
+  modalBox:     { width: "100%", backgroundColor: "#fff", borderRadius: 20, padding: 20, gap: 12 },
+  modalTitle:   { fontSize: 17, fontWeight: "800", color: C.txt, textAlign: "center" },
+  modalSub:     { fontSize: 13, color: C.sub, textAlign: "center", marginBottom: 4 },
+
+  typeCard:     { flexDirection: "row", alignItems: "center", gap: 14, borderWidth: 1.5, borderColor: C.border, borderRadius: 14, padding: 14 },
+  typeIcon:     { width: 52, height: 52, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  typeInfo:     { flex: 1 },
+  typeTitle:    { fontSize: 15, fontWeight: "700", color: C.txt, marginBottom: 3 },
+  typeSub:      { fontSize: 12, color: C.sub },
+
+  modalCancel:  { alignItems: "center", paddingVertical: 12, marginTop: 4 },
+  modalCancelTxt: { fontSize: 14, color: C.sub, fontWeight: "600" },
 });

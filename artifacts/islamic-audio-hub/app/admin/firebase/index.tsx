@@ -324,6 +324,75 @@ function SubcategoriesView({
   );
 }
 
+// ─── Paste-format template (shown to user) ────────────────────────────────────
+const PASTE_FORMAT = `Tamil Title: <text>
+English Title: <text>
+Description: <text>
+
+Quiz:
+Q1: <question>
+A) <option>
+B) <option>
+C) <option>
+Answer: <correct option>
+
+Q2: <question>
+A) <option>
+B) <option>
+C) <option>
+Answer: <correct option>
+
+(3–5 questions, or skip Quiz section completely)`;
+
+// ─── Paste parser ─────────────────────────────────────────────────────────────
+type ParsedContent = { titleTa: string; titleEn: string; description: string; quiz: import("@/services/firebase.firestore").FBQuizQuestion[] };
+
+function parsePastedContent(raw: string): { data?: ParsedContent; error?: string } {
+  const lines = raw.split("\n").map(l => l.trim());
+
+  const pick = (prefix: string) =>
+    lines.find(l => l.toLowerCase().startsWith(prefix.toLowerCase()))
+      ?.slice(prefix.length).trim() ?? "";
+
+  const titleTa    = pick("Tamil Title:");
+  const titleEn    = pick("English Title:");
+  const description = pick("Description:");
+
+  if (!titleTa)    return { error: '"Tamil Title:" கண்டுபிடிக்கவில்லை' };
+  if (!titleEn)    return { error: '"English Title:" கண்டுபிடிக்கவில்லை' };
+  if (!description) return { error: '"Description:" கண்டுபிடிக்கவில்லை' };
+
+  const quizStart = lines.findIndex(l => /^quiz:/i.test(l));
+  const quiz: import("@/services/firebase.firestore").FBQuizQuestion[] = [];
+
+  if (quizStart !== -1) {
+    // Collect non-empty lines after "Quiz:"
+    const qLines = lines.slice(quizStart + 1).filter(l => l !== "");
+    let i = 0;
+    while (i < qLines.length) {
+      const qm = qLines[i].match(/^Q\d+[:.)]\s*(.+)/i);
+      if (!qm) { i++; continue; }
+      const question = qm[1].trim();
+
+      // Scan ahead for A), B), C), Answer:
+      const block = qLines.slice(i + 1, i + 10);
+      const optA = block.find(l => /^A[).:]\s*/i.test(l))?.replace(/^A[).:]\s*/i, "").trim();
+      const optB = block.find(l => /^B[).:]\s*/i.test(l))?.replace(/^B[).:]\s*/i, "").trim();
+      const optC = block.find(l => /^C[).:]\s*/i.test(l))?.replace(/^C[).:]\s*/i, "").trim();
+      const ansLine = block.find(l => /^Answer:/i.test(l));
+      const ansLetter = ansLine?.replace(/^Answer:\s*/i, "").trim().toUpperCase()[0];
+
+      if (!optA || !optB || !optC) return { error: `Q${quiz.length + 1}: A, B, C options கண்டுபிடிக்கவில்லை` };
+      if (!ansLetter || !["A","B","C"].includes(ansLetter)) return { error: `Q${quiz.length + 1}: Answer: A / B / C என்று எழுதவும்` };
+
+      quiz.push({ question, options: [optA, optB, optC], correctIndex: ["A","B","C"].indexOf(ansLetter) });
+      i += 1 + block.findIndex(l => /^Answer:/i.test(l)) + 1;
+    }
+  }
+
+  return { data: { titleTa, titleEn, description, quiz } };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // LEVEL 3 — Cards (strict filter: subcategoryId === sub.id)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -338,7 +407,18 @@ function CardsView({
   const [showTypeModal, setShowTypeModal] = useState(false);
   const [showForm,      setShowForm]      = useState(false);
   const [editId,        setEditId]        = useState<string | null>(null);
-  const [form, setForm] = useState({ titleTa: "", titleEn: "", audioUrl: "", description: "" });
+
+  // Input mode
+  const [inputMode,  setInputMode]  = useState<"manual" | "paste">("manual");
+  const [pasteText,  setPasteText]  = useState("");
+  const [pasteError, setPasteError] = useState("");
+  const [parsedOk,   setParsedOk]   = useState(false);
+  const [showFormat, setShowFormat] = useState(false);
+
+  const [form, setForm] = useState<{
+    titleTa: string; titleEn: string; audioUrl: string; description: string;
+    quiz: import("@/services/firebase.firestore").FBQuizQuestion[];
+  }>({ titleTa: "", titleEn: "", audioUrl: "", description: "", quiz: [] });
 
   // ── Strict Firestore query: only cards where subcategoryId == sub.id ─────
   const load = useCallback(async () => {
@@ -352,15 +432,30 @@ function CardsView({
   function cancelForm() {
     setShowForm(false);
     setEditId(null);
-    setForm({ titleTa: "", titleEn: "", audioUrl: "", description: "" });
+    setForm({ titleTa: "", titleEn: "", audioUrl: "", description: "", quiz: [] });
+    setInputMode("manual");
+    setPasteText(""); setPasteError(""); setParsedOk(false); setShowFormat(false);
   }
   function chooseSingle() { setShowTypeModal(false); setShowForm(true); }
   function chooseBulk()   { setShowTypeModal(false); router.push("/admin/firebase/bulk-create" as any); }
 
   function openEdit(card: FBCard) {
     setEditId(card.id);
-    setForm({ titleTa: card.titleTa, titleEn: card.titleEn, audioUrl: card.audioUrl, description: card.description });
+    setForm({ titleTa: card.titleTa, titleEn: card.titleEn, audioUrl: card.audioUrl, description: card.description, quiz: card.quiz ?? [] });
+    setInputMode("manual");
+    setPasteText(""); setPasteError(""); setParsedOk(false); setShowFormat(false);
     setShowForm(true);
+  }
+
+  function handleParse() {
+    setPasteError("");
+    if (!pasteText.trim()) { setPasteError("உள்ளடக்கம் ஒட்டவும்"); return; }
+    const result = parsePastedContent(pasteText);
+    if (result.error) { setPasteError(result.error); setParsedOk(false); return; }
+    const { titleTa, titleEn, description, quiz } = result.data!;
+    setForm(f => ({ ...f, titleTa, titleEn, description, quiz }));
+    setParsedOk(true);
+    setPasteError("");
   }
 
   async function pickAndUploadAudio() {
@@ -390,16 +485,23 @@ function CardsView({
 
   async function save() {
     if (!form.titleTa.trim()) { Alert.alert("தவறு", "தமிழ் தலைப்பு கட்டாயம்"); return; }
+    if (inputMode === "paste" && !parsedOk) { Alert.alert("தவறு", 'முதலில் "உள்ளடக்கம் ஏற்று" அழுத்தவும்'); return; }
     setSaving(true);
     try {
+      const hasQuiz = form.quiz.length > 0;
       const payload = {
         categoryId:    cat.id,
-        subcategoryId: sub.id,   // always locked to the current subcategory
+        subcategoryId: sub.id,
         titleTa:       form.titleTa.trim(),
         titleEn:       form.titleEn.trim(),
         audioUrl:      form.audioUrl.trim(),
         description:   form.description.trim(),
-        isPremium: false, hasQuiz: false, viewCount: 0, duration: 0, quiz: [],
+        isPremium: false,
+        hasQuiz,
+        quiz:       hasQuiz ? form.quiz : [],
+        quizTitleTa: "",
+        quizTitleEn: "",
+        viewCount: 0, duration: 0,
         sortOrder: editId
           ? (cards.find(c => c.id === editId)?.sortOrder ?? 99)
           : cards.length + 1,
@@ -478,10 +580,99 @@ function CardsView({
           <Text style={s.formTitle}>{editId ? "✏️ Card திருத்து" : "➕ புதிய Card சேர்"}</Text>
           <Text style={s.lockedBadge}>📍 {cat.name} › {sub.name}</Text>
 
-          <Field label="தமிழ் தலைப்பு *" value={form.titleTa}     onChangeText={v => setForm(f => ({ ...f, titleTa: v }))}     placeholder="அல்-ஃபாத்திஹா — பாடம் 1" />
-          <Field label="English Title"    value={form.titleEn}     onChangeText={v => setForm(f => ({ ...f, titleEn: v }))}     placeholder="Al-Fatiha — Lesson 1" />
-          <Field label="விளக்கம்"          value={form.description} onChangeText={v => setForm(f => ({ ...f, description: v }))} multiline />
+          {/* ── Mode toggle ── */}
+          <View style={s.modeToggle}>
+            <Pressable
+              style={[s.modeBtn, inputMode === "manual" && s.modeBtnActive]}
+              onPress={() => { setInputMode("manual"); setPasteError(""); setParsedOk(false); }}
+            >
+              <Ionicons name="create-outline" size={15} color={inputMode === "manual" ? "#fff" : C.sub} />
+              <Text style={[s.modeBtnTxt, inputMode === "manual" && { color: "#fff" }]}>✏️ Manual</Text>
+            </Pressable>
+            <Pressable
+              style={[s.modeBtn, inputMode === "paste" && s.modeBtnActive]}
+              onPress={() => setInputMode("paste")}
+            >
+              <Ionicons name="clipboard-outline" size={15} color={inputMode === "paste" ? "#fff" : C.sub} />
+              <Text style={[s.modeBtnTxt, inputMode === "paste" && { color: "#fff" }]}>📋 Paste Content</Text>
+            </Pressable>
+          </View>
 
+          {/* ════════ PASTE MODE ════════ */}
+          {inputMode === "paste" && (
+            <View>
+              {/* Format guide toggle */}
+              <View style={s.fmtHeader}>
+                <Pressable style={s.fmtToggleBtn} onPress={() => setShowFormat(v => !v)}>
+                  <Ionicons name={showFormat ? "chevron-up" : "chevron-down"} size={14} color={C.green} />
+                  <Text style={s.fmtToggleTxt}>{showFormat ? "Format மறை" : "📄 Format காட்டு"}</Text>
+                </Pressable>
+              </View>
+
+              {showFormat && (
+                <View style={s.fmtBox}>
+                  <Text style={s.fmtTitle}>📋 இந்த format-ல் ஒட்டவும்:</Text>
+                  <Text style={s.fmtCode}>{PASTE_FORMAT}</Text>
+                </View>
+              )}
+
+              {/* Paste textarea */}
+              <Text style={s.fieldLabel}>உள்ளடக்கத்தை இங்கே ஒட்டவும் *</Text>
+              <TextInput
+                style={s.pasteArea}
+                value={pasteText}
+                onChangeText={t => { setPasteText(t); setParsedOk(false); setPasteError(""); }}
+                placeholder={"Tamil Title: ...\nEnglish Title: ...\nDescription: ...\n\nQuiz:\nQ1: ..."}
+                placeholderTextColor="#9abca4"
+                multiline
+                textAlignVertical="top"
+              />
+
+              {/* Error */}
+              {!!pasteError && (
+                <View style={s.parseError}>
+                  <Ionicons name="alert-circle" size={15} color={C.red} />
+                  <Text style={s.parseErrorTxt}>⚠️ {pasteError}</Text>
+                </View>
+              )}
+
+              {/* Parse button */}
+              <TouchableOpacity
+                style={[s.btn, parsedOk ? { backgroundColor: C.green, opacity: 0.85 } : { backgroundColor: "#2563eb" }, { marginBottom: 12 }]}
+                onPress={handleParse}
+                activeOpacity={0.85}
+              >
+                <Ionicons name={parsedOk ? "checkmark-circle" : "refresh-circle-outline"} size={18} color="#fff" />
+                <Text style={s.btnTxt}>{parsedOk ? "✅ ஏற்றப்பட்டது — மீண்டும் பாரு" : "✅ உள்ளடக்கம் ஏற்று"}</Text>
+              </TouchableOpacity>
+
+              {/* Parsed preview */}
+              {parsedOk && (
+                <View style={s.parsedPreview}>
+                  <Text style={s.parsedTitle}>📝 பாரசர் முடிவு:</Text>
+                  <Text style={s.parsedRow}><Text style={s.parsedKey}>Tamil Title: </Text>{form.titleTa}</Text>
+                  <Text style={s.parsedRow}><Text style={s.parsedKey}>English Title: </Text>{form.titleEn}</Text>
+                  <Text style={s.parsedRow}><Text style={s.parsedKey}>Description: </Text>{form.description}</Text>
+                  {form.quiz.length > 0 && (
+                    <Text style={s.parsedRow}>
+                      <Text style={s.parsedKey}>Quiz: </Text>{form.quiz.length} கேள்விகள் ✅
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* ════════ MANUAL MODE ════════ */}
+          {inputMode === "manual" && (
+            <View>
+              <Field label="தமிழ் தலைப்பு *" value={form.titleTa}     onChangeText={v => setForm(f => ({ ...f, titleTa: v }))}     placeholder="அல்-ஃபாத்திஹா — பாடம் 1" />
+              <Field label="English Title"    value={form.titleEn}     onChangeText={v => setForm(f => ({ ...f, titleEn: v }))}     placeholder="Al-Fatiha — Lesson 1" />
+              <Field label="விளக்கம்"          value={form.description} onChangeText={v => setForm(f => ({ ...f, description: v }))} multiline />
+            </View>
+          )}
+
+          {/* ── Audio (both modes) ── */}
           <Text style={s.fieldLabel}>ஒலி கோப்பு</Text>
           {form.audioUrl ? (
             <View style={[s.audioRow, { backgroundColor: "#e8f5ee", borderColor: "#a8d8b8" }]}>
@@ -669,6 +860,31 @@ const s = StyleSheet.create({
   iconBtn:     { width: 32, height: 32, borderRadius: 8, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center" },
   quizPill:    { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
   quizPillTxt: { fontSize: 10, color: C.green, fontWeight: "700" },
+
+  // ── Mode toggle ──
+  modeToggle:    { flexDirection: "row", borderRadius: 10, borderWidth: 1, borderColor: C.border, overflow: "hidden", marginBottom: 16 },
+  modeBtn:       { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, backgroundColor: C.bg },
+  modeBtnActive: { backgroundColor: C.green },
+  modeBtnTxt:    { fontSize: 13, fontWeight: "700", color: C.sub },
+
+  // ── Format guide ──
+  fmtHeader:     { flexDirection: "row", justifyContent: "flex-end", marginBottom: 8 },
+  fmtToggleBtn:  { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: "#e8f5ee", borderWidth: 1, borderColor: C.border },
+  fmtToggleTxt:  { fontSize: 12, fontWeight: "700", color: C.green },
+  fmtBox:        { backgroundColor: "#f8fff8", borderRadius: 10, borderWidth: 1, borderColor: "#b8dfc6", padding: 14, marginBottom: 12 },
+  fmtTitle:      { fontSize: 12, fontWeight: "700", color: C.green, marginBottom: 8 },
+  fmtCode:       { fontSize: 11, color: C.txt, lineHeight: 19, fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace" },
+
+  // ── Paste textarea ──
+  pasteArea:     { borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 14, fontSize: 13, color: C.txt, backgroundColor: C.bg, height: 220, textAlignVertical: "top", marginBottom: 10 },
+
+  // ── Parse feedback ──
+  parseError:    { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#fef2f2", borderRadius: 8, borderWidth: 1, borderColor: "#fca5a5", padding: 10, marginBottom: 10 },
+  parseErrorTxt: { fontSize: 12, color: C.red, flex: 1 },
+  parsedPreview: { backgroundColor: "#f0fff6", borderRadius: 10, borderWidth: 1, borderColor: "#a7f3d0", padding: 14, marginBottom: 12 },
+  parsedTitle:   { fontSize: 12, fontWeight: "800", color: C.green, marginBottom: 8 },
+  parsedRow:     { fontSize: 12, color: C.txt, marginBottom: 4, lineHeight: 18 },
+  parsedKey:     { fontWeight: "700", color: C.green },
 
   // Type-selection modal
   modalOverlay:   { flex: 1, backgroundColor: "#00000066", justifyContent: "center", alignItems: "center", padding: 24 },

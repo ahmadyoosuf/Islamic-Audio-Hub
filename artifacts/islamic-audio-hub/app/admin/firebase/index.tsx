@@ -867,6 +867,7 @@ export default function FirebaseAdminScreen() {
   function goToSubcategories() { setSelectedSub(null); }
 
   return (
+    <View style={s.webWrapper}>
     <SafeAreaView style={s.safe} edges={["top"]}>
 
       {/* ── Header ── */}
@@ -897,12 +898,29 @@ export default function FirebaseAdminScreen() {
       )}
 
     </SafeAreaView>
+    </View>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: C.bg },
+  webWrapper: {
+    flex: 1,
+    backgroundColor: Platform.OS === "web" ? "#e8ede9" : C.bg,
+    alignItems: Platform.OS === "web" ? "center" : "stretch",
+  },
+  safe: {
+    flex: 1,
+    backgroundColor: C.bg,
+    width: Platform.OS === "web" ? 480 : "100%",
+    maxWidth: Platform.OS === "web" ? 480 : undefined,
+    ...(Platform.OS === "web" ? {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.15,
+      shadowRadius: 20,
+    } : {}),
+  },
 
   header: {
     flexDirection: "row", alignItems: "center", gap: 12,

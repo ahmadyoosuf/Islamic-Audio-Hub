@@ -298,7 +298,6 @@ export default function HomeScreen() {
           {[
             { icon: "person-circle-outline", label: "சுயவிவரம்", path: "/(tabs)/profile" },
             { icon: "heart-outline", label: "பிடித்தவை", path: "/(tabs)/favorites" },
-            { icon: "library-outline", label: "Library", path: "/cms" },
             { icon: "shield-checkmark-outline", label: "Admin Panel", path: "/admin" },
           ].map(item => (
             <TouchableOpacity

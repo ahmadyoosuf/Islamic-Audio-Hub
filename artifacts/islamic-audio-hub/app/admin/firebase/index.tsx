@@ -402,8 +402,9 @@ function CardsView({
   const [cards,       setCards]       = useState<FBCard[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [saving,      setSaving]      = useState(false);
-  const [uploading,   setUploading]   = useState(false);
-  const [uploadPhase, setUploadPhase] = useState<"reading" | "uploading">("reading");
+  const [uploading,      setUploading]      = useState(false);
+  const [uploadPhase,    setUploadPhase]    = useState<"reading" | "uploading">("reading");
+  const [uploadPercent,  setUploadPercent]  = useState(0);
   const [showTypeModal, setShowTypeModal] = useState(false);
   const [showForm,      setShowForm]      = useState(false);
   const [editId,        setEditId]        = useState<string | null>(null);
@@ -473,9 +474,10 @@ function CardsView({
         const asset = result.assets[0];
         source = asset.uri; name = asset.name ?? "audio.mp3";
       }
-      setUploading(true); setUploadPhase("reading");
+      setUploading(true); setUploadPhase("reading"); setUploadPercent(0);
       const url = await uploadAudio(source, `${Date.now()}_${name}`, (p: UploadProgress) => {
         if (p.percent > 0) setUploadPhase("uploading");
+        setUploadPercent(p.percent);
       });
       setForm(f => ({ ...f, audioUrl: url }));
       Alert.alert("✅ பதிவேற்றம் வெற்றி", `"${name}" Firebase Storage-ல் சேமிக்கப்பட்டது`);
@@ -685,9 +687,20 @@ function CardsView({
               </Pressable>
             </View>
           ) : uploading ? (
-            <View style={s.audioRow}>
-              <ActivityIndicator size="small" color={C.green} />
-              <Text style={s.audioTxt}>{uploadPhase === "reading" ? "📂 படிக்கிறது..." : "☁️ பதிவேற்றுகிறது..."}</Text>
+            <View style={s.uploadProgressWrap}>
+              <View style={s.audioRow}>
+                <ActivityIndicator size="small" color={C.green} />
+                <Text style={s.audioTxt}>
+                  {uploadPhase === "reading"
+                    ? "📂 கோப்பு படிக்கிறது..."
+                    : `☁️ பதிவேற்றுகிறது… ${uploadPercent}%`}
+                </Text>
+              </View>
+              {uploadPhase === "uploading" && (
+                <View style={s.progressBar}>
+                  <View style={[s.progressFill, { width: `${uploadPercent}%` as any }]} />
+                </View>
+              )}
             </View>
           ) : (
             <TouchableOpacity style={[s.btn, { backgroundColor: C.gold, marginBottom: 8 }]} onPress={pickAndUploadAudio}>
@@ -845,9 +858,12 @@ const s = StyleSheet.create({
   btnGray:     { backgroundColor: "#ccc", paddingHorizontal: 20 },
   btnTxt:      { color: "#fff", fontWeight: "700", fontSize: 14 },
 
-  audioRow:    { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 10, marginBottom: 12 },
-  audioTxt:    { fontSize: 13, color: C.sub },
-  audioIcon:   { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  audioRow:           { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 10, marginBottom: 8 },
+  audioTxt:           { fontSize: 13, color: C.sub },
+  audioIcon:          { width: 32, height: 32, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  uploadProgressWrap: { marginBottom: 12 },
+  progressBar:        { height: 6, borderRadius: 3, backgroundColor: "#d4ead9", overflow: "hidden" },
+  progressFill:       { height: 6, backgroundColor: C.green, borderRadius: 3 },
 
   listTitle:   { fontSize: 13, fontWeight: "700", color: C.sub, marginBottom: 10 },
   emptyTxt:    { textAlign: "center", color: C.sub, marginTop: 20, fontStyle: "italic" },

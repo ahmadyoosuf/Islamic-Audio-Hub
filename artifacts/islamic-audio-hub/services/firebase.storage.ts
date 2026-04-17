@@ -1,11 +1,11 @@
 import {
   ref,
-  uploadBytes,
+  uploadBytesResumable,
   getDownloadURL,
   deleteObject,
   type StorageReference,
 } from "firebase/storage";
-import { storage } from "./firebase.config";
+import { storage, ensureAdminSignedIn } from "./firebase.config";
 
 export interface UploadProgress {
   bytesTransferred: number;
@@ -14,8 +14,8 @@ export interface UploadProgress {
 }
 
 // ─── Pick audio file on web ───────────────────────────────────────────────────
-// On web, expo-document-picker returns an object URL that XHR cannot read.
-// A hidden <input type="file"> gives us the actual File object (already a Blob).
+// On web, expo-document-picker returns an object URL that XHR cannot reliably
+// read. A hidden <input type="file"> gives us the actual File object (Blob).
 
 export function pickAudioFileWeb(): Promise<File | null> {
   return new Promise(resolve => {
@@ -26,12 +26,12 @@ export function pickAudioFileWeb(): Promise<File | null> {
 
     input.onchange = (e: Event) => {
       const file = (e.target as HTMLInputElement).files?.[0] ?? null;
-      document.body.removeChild(input);
+      if (document.body.contains(input)) document.body.removeChild(input);
       resolve(file);
     };
 
     input.addEventListener("cancel", () => {
-      document.body.removeChild(input);
+      if (document.body.contains(input)) document.body.removeChild(input);
       resolve(null);
     });
 
@@ -41,73 +41,106 @@ export function pickAudioFileWeb(): Promise<File | null> {
 }
 
 // ─── uploadAudio ──────────────────────────────────────────────────────────────
-// source: string  → local file URI from expo-document-picker (native/mobile)
-// source: Blob    → File object from <input type="file"> (web)
+// source: string  → local file URI from expo-document-picker (native)
+// source: File    → File object from <input type="file"> (web)
 //
 // Storage path: songs/<filename>
 //
-// NOTE: Firebase Storage security rules must allow writes, e.g.:
+// Requires Firebase Storage security rules that allow authenticated writes:
+//   match /{allPaths=**} { allow read, write: if request.auth != null; }
+// OR open rules for development:
 //   match /{allPaths=**} { allow read, write: if true; }
 
 export async function uploadAudio(
-  source:      string | Blob,
+  source:      string | File,
   fileName:    string,
   onProgress?: (p: UploadProgress) => void,
 ): Promise<string> {
   try {
+    // ── Ensure admin is signed in (required for Storage rules) ────────────────
+    try {
+      await ensureAdminSignedIn();
+    } catch (authErr: any) {
+      console.warn("[uploadAudio] Auth failed, attempting upload anyway:", authErr.code);
+      // Continue — if Storage rules allow public writes it will still succeed
+    }
+
     const storageRef: StorageReference = ref(storage, "songs/" + fileName);
 
-    // ── Get blob ─────────────────────────────────────────────────────────────
-    let blob: Blob | undefined;
+    // ── Get blob ──────────────────────────────────────────────────────────────
+    let blob: Blob;
 
     if (typeof source === "string") {
-      // 👉 Mobile case (URI → Blob via XHR)
-      // fetch() silently returns empty blob on local file:// URIs in React Native.
-      // XMLHttpRequest with responseType="blob" is the only reliable method.
+      // Native (iOS / Android): URI → Blob via XHR
+      // fetch() returns empty blobs on local file:// URIs in React Native;
+      // XHR with responseType="blob" is the only reliable method.
       blob = await new Promise<Blob>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 400) resolve(xhr.response as Blob);
-          else reject(new Error(`XHR status ${xhr.status}`));
+        xhr.onload  = () => {
+          if (xhr.status >= 200 && xhr.status < 400) {
+            resolve(xhr.response as Blob);
+          } else {
+            reject(new Error(`XHR status ${xhr.status} for URI: ${source}`));
+          }
         };
-        xhr.onerror = () => reject(new Error("XHR network error"));
+        xhr.onerror  = () => reject(new Error("XHR network error reading local file"));
         xhr.responseType = "blob";
-        xhr.open("GET", source as string, true);
+        xhr.open("GET", source, true);
         xhr.send(null);
       });
     } else {
-      // 👉 Web case — File IS already a Blob, use directly
+      // Web: File IS already a Blob — use directly
       blob = source;
     }
 
-    // ── DEBUG LOGS ────────────────────────────────────────────────────────────
-    console.log("FILE:", fileName);
-    console.log("BLOB:", blob);
-    console.log("SIZE:", blob?.size);
-
-    if (!blob || blob.size === 0) {
-      throw new Error("❌ Blob is empty or undefined");
+    // ── Validate blob ─────────────────────────────────────────────────────────
+    console.log("[uploadAudio] File:", fileName, "| Size:", blob.size, "bytes | Type:", blob.type);
+    if (blob.size === 0) {
+      throw new Error("தேர்ந்தெடுத்த கோப்பு காலியாக உள்ளது (0 bytes). வேறு கோப்பை முயற்சிக்கவும்.");
     }
 
     onProgress?.({ bytesTransferred: 0, totalBytes: blob.size, percent: 0 });
 
-    // ── Upload ────────────────────────────────────────────────────────────────
-    const snapshot = await uploadBytes(storageRef, blob);
-    console.log("✅ Upload success:", snapshot);
+    // ── Determine content type ────────────────────────────────────────────────
+    const contentType = blob.type || guessContentType(fileName);
+    const metadata = { contentType };
 
-    onProgress?.({ bytesTransferred: blob.size, totalBytes: blob.size, percent: 100 });
+    // ── Resumable upload (real progress, better CORS handling) ────────────────
+    const url = await new Promise<string>((resolve, reject) => {
+      const task = uploadBytesResumable(storageRef, blob, metadata);
 
-    // ── Get download URL ──────────────────────────────────────────────────────
-    const url = await getDownloadURL(snapshot.ref);
-    console.log("✅ Download URL:", url.substring(0, 80) + "...");
+      task.on(
+        "state_changed",
+        snap => {
+          const percent = snap.totalBytes > 0
+            ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100)
+            : 0;
+          console.log(`[uploadAudio] Progress: ${percent}% (${snap.state})`);
+          onProgress?.({ bytesTransferred: snap.bytesTransferred, totalBytes: snap.totalBytes, percent });
+        },
+        err => {
+          console.error("[uploadAudio] ❌ Upload error:", err.code, err.message, err.serverResponse);
+          reject(err);
+        },
+        async () => {
+          try {
+            const downloadUrl = await getDownloadURL(task.snapshot.ref);
+            console.log("[uploadAudio] ✅ Download URL:", downloadUrl.substring(0, 80));
+            resolve(downloadUrl);
+          } catch (urlErr) {
+            reject(urlErr);
+          }
+        },
+      );
+    });
+
     return url;
 
   } catch (e: any) {
-    console.error("🔥 FULL ERROR:", e);
-    console.error("   code:", e?.code);
-    console.error("   message:", e?.message);
-    console.error("   serverResponse:", e?.serverResponse);
-    throw e;
+    // Re-throw with a human-readable message that maps Firebase error codes
+    const msg = friendlyStorageError(e);
+    console.error("[uploadAudio] Throwing:", msg, "|", e?.code, "|", e?.serverResponse);
+    throw new Error(msg);
   }
 }
 
@@ -118,7 +151,7 @@ export async function deleteAudio(downloadUrl: string): Promise<void> {
     const fileRef = ref(storage, downloadUrl);
     await deleteObject(fileRef);
   } catch (e: any) {
-    console.error("🔥 deleteAudio error:", e);
+    console.error("[deleteAudio] error:", e);
     throw e;
   }
 }
@@ -128,4 +161,44 @@ export async function deleteAudio(downloadUrl: string): Promise<void> {
 export async function getAudioUrl(path: string): Promise<string> {
   const fileRef = ref(storage, path);
   return await getDownloadURL(fileRef);
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function guessContentType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const map: Record<string, string> = {
+    mp3: "audio/mpeg",
+    mp4: "audio/mp4",
+    m4a: "audio/mp4",
+    ogg: "audio/ogg",
+    wav: "audio/wav",
+    aac: "audio/aac",
+    flac: "audio/flac",
+    webm: "audio/webm",
+  };
+  return map[ext ?? ""] ?? "audio/mpeg";
+}
+
+function friendlyStorageError(e: any): string {
+  const code: string = e?.code ?? "";
+  const map: Record<string, string> = {
+    "storage/unauthorized":
+      "❌ பதிவேற்ற அனுமதி இல்லை (storage/unauthorized).\n\nFire​base Console → Storage → Rules-ல் இந்த rule சேர்க்கவும்:\n  allow read, write: if true;",
+    "storage/canceled":
+      "⚠️ பதிவேற்றம் ரத்து செய்யப்பட்டது.",
+    "storage/quota-exceeded":
+      "❌ Firebase Storage quota முடிந்தது. Upgrade தேவை.",
+    "storage/unauthenticated":
+      "❌ உள்நுழைவு தேவை (storage/unauthenticated).\n\nFire​base Auth-ல் admin@example.com பயனர் உருவாக்கவும்.",
+    "storage/retry-limit-exceeded":
+      "❌ பதிவேற்றம் Timeout ஆனது. Internet இணைப்பை சரிபார்க்கவும்.",
+    "storage/invalid-checksum":
+      "❌ கோப்பு சேதமடைந்தது. மீண்டும் முயற்சிக்கவும்.",
+    "storage/cannot-slice-blob":
+      "❌ கோப்பை படிக்க முடியவில்லை. வேறு கோப்பை முயற்சிக்கவும்.",
+    "storage/server-file-wrong-size":
+      "❌ பதிவேற்றம் முழுமையடையவில்லை. மீண்டும் முயற்சிக்கவும்.",
+  };
+  return map[code] ?? `❌ பதிவேற்றம் தோல்வி [${code || "unknown"}]: ${e?.message ?? ""}`;
 }

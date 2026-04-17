@@ -1,435 +1,380 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState, useEffect } from "react";
 import {
+  ActivityIndicator,
+  Image,
   Platform,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   View,
   useColorScheme,
-  ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AudioPlayer from "@/components/AudioPlayer";
 import QuizModal from "@/components/QuizModal";
-import TrackCard from "@/components/TrackCard";
-import { useApp } from "@/context/AppContext";
 import { useAudio } from "@/context/AudioContext";
-import { getTrackById, getTracksByCategory, type UnifiedTrack } from "@/data/unifiedStorage";
-import { useColors } from "@/hooks/useColors";
+import { useApp } from "@/context/AppContext";
+import { getCardById, type FBCard } from "@/services/firebase.firestore";
+import type { Track } from "@/context/AppContext";
 
-function formatDuration(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h} மணி ${m} நிமிடம்`;
-  return `${m} நிமிடம்`;
+// ─── Tab definition ───────────────────────────────────────────────────────────
+type TabKey = "explanation" | "podcast" | "quiz" | "read" | "slide";
+const TABS: { key: TabKey; icon: string; label: string }[] = [
+  { key: "explanation", icon: "volume-high",       label: "விளக்கம்" },
+  { key: "podcast",     icon: "mic",               label: "Podcast"  },
+  { key: "quiz",        icon: "help-circle",       label: "Quiz"     },
+  { key: "read",        icon: "book-outline",      label: "படிக்க"   },
+  { key: "slide",       icon: "image-outline",     label: "Slide"    },
+];
+
+// ─── FBCard → Track adapter ───────────────────────────────────────────────────
+function fbCardToTrack(c: FBCard): Track {
+  return {
+    id:          c.id,
+    title:       c.titleTa || c.titleEn,
+    categoryId:  c.categoryId,
+    categoryName: "",
+    duration:    c.duration,
+    audioUrl:    c.audioUrl,
+    viewCount:   c.viewCount,
+    isPremium:   c.isPremium,
+    sortOrder:   c.sortOrder,
+    hasQuiz:     c.hasQuiz,
+    isBuiltIn:   false,
+    description: c.description,
+    fileName:    undefined,
+    uploadedAt:  c.createdAt,
+  };
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  quran: "#c8a84b",
-  hadith: "#4ade80",
-  iman: "#60a5fa",
-  seerah: "#f472b6",
-  daily: "#fb923c",
-};
-
-export default function AudioDetailScreen() {
-  const colors = useColors();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const { playTrack, currentTrack, isPlaying, togglePlay, setIsExpanded } = useAudio();
-  const { isFavorite, addFavorite, removeFavorite } = useApp();
-  const [showQuiz, setShowQuiz] = useState(false);
-  const [track, setTrack] = useState<UnifiedTrack | null>(null);
-  const [catTracks, setCatTracks] = useState<UnifiedTrack[]>([]);
-
-  useEffect(() => {
-    if (!id) return;
-    getTrackById(id).then(t => {
-      setTrack(t);
-      if (t) {
-        getTracksByCategory(t.categoryId).then(all => setCatTracks(all));
-      }
-    });
-  }, [id]);
-
-  const catColor = track ? (CATEGORY_COLORS[track.categoryId] ?? "#c8a84b") : "#c8a84b";
-  const related = catTracks.filter((t) => t.id !== id).slice(0, 5);
-  const isActive = currentTrack?.id === track?.id;
-  const fav = track ? isFavorite(track.id) : false;
-  const hasQuiz = track?.hasQuiz === true;
-
-  const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const botPad = Platform.OS === "web" ? 34 + 84 : insets.bottom + 60;
+// ─── Audio Tab ────────────────────────────────────────────────────────────────
+function AudioTab({ url, label, card, isDark }: { url: string; label: string; card: FBCard; isDark: boolean }) {
+  const { playTrack, currentTrack, isPlaying, togglePlay } = useAudio();
+  const track = fbCardToTrack({ ...card, audioUrl: url });
+  const isActive = currentTrack?.id === card.id;
 
   const handlePlay = async () => {
-    if (!track) return;
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (isActive) {
-      togglePlay();
-    } else {
-      playTrack(track, catTracks);
-    }
-    setIsExpanded(false);
+    if (isActive) togglePlay();
+    else playTrack(track, [track]);
   };
 
-  const handleFav = async () => {
-    if (!track) return;
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    fav ? removeFavorite(track.id) : addFavorite(track.id);
-  };
-
-  const handleShare = async () => {
-    if (!track) return;
-    await Share.share({
-      message: `Islamic Audio Hub-ல் இந்த பாடத்தை கேளுங்கள்: ${track.title}`,
-      title: track.title,
-    });
-  };
-
-  if (!track) {
+  if (!url) {
     return (
-      <View
-        style={[
-          styles.root,
-          { backgroundColor: isDark ? "#0f0f0f" : "#f8f9fa" },
-        ]}
-      >
-        <View style={[styles.header, { paddingTop: topPad + 16 }]}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color={colors.foreground} />
-          </Pressable>
-        </View>
-        <View style={styles.emptyCenter}>
-          <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-            பாடம் கிடைக்கவில்லை
-          </Text>
-        </View>
+      <View style={styles.emptyTab}>
+        <Ionicons name="musical-note-outline" size={48} color="#888" />
+        <Text style={[styles.emptyTabTxt, { color: isDark ? "#888" : "#aaa" }]}>
+          {label} ஒலி இன்னும் சேர்க்கப்படவில்லை
+        </Text>
       </View>
     );
   }
 
   return (
-    <View
-      style={[
-        styles.root,
-        { backgroundColor: isDark ? "#0f0f0f" : "#f8f9fa" },
-      ]}
-    >
-      <ScrollView
-        contentContainerStyle={{
-          paddingTop: topPad + 16,
-          paddingBottom: botPad + 80,
-        }}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={24} color={colors.foreground} />
-          </Pressable>
-          <Text
-            style={[styles.headerLabel, { color: colors.mutedForeground }]}
-          >
-            {track.categoryName}
-          </Text>
-          <Pressable onPress={handleShare} style={styles.shareBtn}>
-            <Ionicons name="share-outline" size={24} color={colors.foreground} />
-          </Pressable>
-        </View>
-
-        <View style={styles.artworkSection}>
-          <View style={[styles.artworkBg, { backgroundColor: catColor + "18" }]}>
-            <View style={[styles.artworkCircle, { backgroundColor: catColor + "33" }]}>
-              <Ionicons name="musical-notes" size={64} color={catColor} />
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.trackInfoSection}>
-          <View
-            style={[
-              styles.categoryBadge,
-              { backgroundColor: catColor + "22" },
-            ]}
-          >
-            <Text style={[styles.categoryBadgeText, { color: catColor }]}>
-              {track.categoryName}
-            </Text>
-          </View>
-          <Text style={[styles.trackTitle, { color: colors.foreground }]}>
-            {track.title}
-          </Text>
-          <View style={styles.metaRow}>
-            <View style={styles.metaItem}>
-              <Ionicons name="time-outline" size={14} color={colors.mutedForeground} />
-              <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                {formatDuration(track.duration)}
-              </Text>
-            </View>
-            <View style={styles.metaItem}>
-              <Ionicons name="headset-outline" size={14} color={colors.mutedForeground} />
-              <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                {track.viewCount.toLocaleString()} கேட்டார்கள்
-              </Text>
-            </View>
-            {track.isPremium && (
-              <View style={[styles.premiumTag, { backgroundColor: "#c8a84b22" }]}>
-                <Ionicons name="star" size={12} color="#c8a84b" />
-                <Text style={styles.premiumTagText}>Premium</Text>
-              </View>
-            )}
-          </View>
-        </View>
-
-        <View style={styles.actionsRow}>
-          <Pressable onPress={handleFav} style={styles.iconAction}>
-            <Ionicons
-              name={fav ? "heart" : "heart-outline"}
-              size={28}
-              color={fav ? "#ef4444" : colors.mutedForeground}
-            />
-          </Pressable>
-          <Pressable
-            onPress={handlePlay}
-            style={[styles.playMain, { backgroundColor: catColor }]}
-          >
-            <Ionicons
-              name={isActive && isPlaying ? "pause" : "play"}
-              size={28}
-              color="#000"
-            />
-            <Text style={styles.playMainText}>
-              {isActive && isPlaying ? "இடைநிறுத்து" : "கேளுங்கள்"}
-            </Text>
-          </Pressable>
-          <Pressable onPress={handleShare} style={styles.iconAction}>
-            <Ionicons name="share-outline" size={28} color={colors.mutedForeground} />
-          </Pressable>
-        </View>
-
-        {hasQuiz && (
-          <Pressable
-            onPress={() => setShowQuiz(true)}
-            style={styles.quizBtnWrapper}
-          >
-            <LinearGradient
-              colors={["#c8a84b", "#fb923c"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.quizBtn}
-            >
-              <Ionicons name="game-controller" size={22} color="#000" />
-              <Text style={styles.quizBtnText}>கேள்வி-பதில் விளையாடு</Text>
-              <Ionicons name="chevron-forward" size={18} color="#000" />
-            </LinearGradient>
-          </Pressable>
-        )}
-
-        {related.length > 0 && (
-          <View style={styles.relatedSection}>
-            <Text style={[styles.relatedTitle, { color: colors.foreground }]}>
-              இதே பிரிவில் மேலும்
-            </Text>
-            {related.map((rel) => (
-              <TrackCard
-                key={rel.id}
-                track={rel}
-                variant="compact"
-                playlist={catTracks}
-              />
-            ))}
-          </View>
-        )}
-      </ScrollView>
-
-      <View
-        style={[
-          styles.playerBar,
-          { bottom: botPad - (Platform.OS === "web" ? 84 : 60) },
-        ]}
-      >
-        <AudioPlayer />
+    <View style={styles.audioTab}>
+      <View style={[styles.audioArtwork, { backgroundColor: isDark ? "#1a3a2a" : "#e8f5ee" }]}>
+        <Ionicons name="musical-notes" size={72} color="#1a7a4a" />
       </View>
+      <Text style={[styles.audioTabTitle, { color: isDark ? "#fff" : "#0d2414" }]}>
+        {card.titleTa || card.titleEn}
+      </Text>
+      {!!card.description && (
+        <Text style={[styles.audioTabDesc, { color: isDark ? "#aaa" : "#5a7a64" }]} numberOfLines={3}>
+          {card.description}
+        </Text>
+      )}
+      <Pressable
+        onPress={handlePlay}
+        style={[styles.playBtn, { backgroundColor: "#1a7a4a" }]}
+      >
+        <Ionicons name={isActive && isPlaying ? "pause" : "play"} size={26} color="#fff" />
+        <Text style={styles.playBtnTxt}>
+          {isActive && isPlaying ? "இடைநிறுத்து" : label + " கேளுங்கள்"}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
 
+// ─── Read Tab ─────────────────────────────────────────────────────────────────
+function ReadTab({ content, isDark }: { content: string; isDark: boolean }) {
+  if (!content) {
+    return (
+      <View style={styles.emptyTab}>
+        <Ionicons name="book-outline" size={48} color="#888" />
+        <Text style={[styles.emptyTabTxt, { color: isDark ? "#888" : "#aaa" }]}>
+          படிக்கும் உரை இன்னும் சேர்க்கப்படவில்லை
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <ScrollView style={styles.readScroll} showsVerticalScrollIndicator={false}>
+      <Text style={[styles.readContent, { color: isDark ? "#e8e8e8" : "#1a1a1a" }]}>
+        {content}
+      </Text>
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+}
+
+// ─── Slide Tab ────────────────────────────────────────────────────────────────
+function SlideTab({ url, isDark }: { url: string; isDark: boolean }) {
+  if (!url) {
+    return (
+      <View style={styles.emptyTab}>
+        <Ionicons name="image-outline" size={48} color="#888" />
+        <Text style={[styles.emptyTabTxt, { color: isDark ? "#888" : "#aaa" }]}>
+          Slide படம் இன்னும் சேர்க்கப்படவில்லை
+        </Text>
+      </View>
+    );
+  }
+  return (
+    <ScrollView contentContainerStyle={styles.slideCont} showsVerticalScrollIndicator={false}>
+      <Image
+        source={{ uri: url }}
+        style={styles.slideImage}
+        resizeMode="contain"
+      />
+    </ScrollView>
+  );
+}
+
+// ─── Quiz Tab ─────────────────────────────────────────────────────────────────
+function QuizTab({ card, isDark }: { card: FBCard; isDark: boolean }) {
+  const [showQuiz, setShowQuiz] = useState(false);
+
+  if (!card.hasQuiz || !card.quiz?.length) {
+    return (
+      <View style={styles.emptyTab}>
+        <Ionicons name="help-circle-outline" size={48} color="#888" />
+        <Text style={[styles.emptyTabTxt, { color: isDark ? "#888" : "#aaa" }]}>
+          Quiz இன்னும் சேர்க்கப்படவில்லை
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.quizTab}>
+      <View style={[styles.quizArtwork, { backgroundColor: isDark ? "#1a1a3a" : "#f0f4ff" }]}>
+        <Ionicons name="game-controller" size={64} color="#4a6ef5" />
+      </View>
+      <Text style={[styles.quizTabTitle, { color: isDark ? "#fff" : "#0d2414" }]}>
+        {card.quizTitleTa || card.titleTa || "வினாடி வினா"}
+      </Text>
+      <Text style={[styles.quizTabSub, { color: isDark ? "#aaa" : "#5a7a64" }]}>
+        {card.quiz.length} கேள்விகள் உள்ளன
+      </Text>
+      <Pressable
+        onPress={() => setShowQuiz(true)}
+        style={[styles.playBtn, { backgroundColor: "#4a6ef5" }]}
+      >
+        <Ionicons name="play" size={22} color="#fff" />
+        <Text style={styles.playBtnTxt}>Quiz தொடங்கு</Text>
+      </Pressable>
       <QuizModal
         visible={showQuiz}
         onClose={() => setShowQuiz(false)}
-        trackId={track.id}
-        trackTitle={track.title}
-        prizeEnabled={track.prizeEnabled ?? false}
+        trackId={card.id}
+        trackTitle={card.titleTa || card.titleEn}
+        prizeEnabled={false}
       />
     </View>
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Main Screen
+// ═══════════════════════════════════════════════════════════════════════════════
+export default function AudioDetailScreen() {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { isFavorite, addFavorite, removeFavorite } = useApp();
+  const [card, setCard] = useState<FBCard | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabKey>("explanation");
+
+  const bg  = isDark ? "#0a0a0a" : "#f4f8f5";
+  const fg  = isDark ? "#ffffff" : "#0d2414";
+  const sub = isDark ? "#888"    : "#5a7a64";
+
+  useEffect(() => {
+    if (!id) { setLoading(false); return; }
+    getCardById(id)
+      .then(c => { setCard(c); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  const topPad = Platform.OS === "web" ? 67 : insets.top;
+  const botPad = Platform.OS === "web" ? 34 + 84 : insets.bottom + 60;
+
+  if (loading) {
+    return (
+      <View style={[styles.root, { backgroundColor: bg, paddingTop: topPad + 20 }]}>
+        <ActivityIndicator size="large" color="#1a7a4a" />
+      </View>
+    );
+  }
+
+  if (!card) {
+    return (
+      <View style={[styles.root, { backgroundColor: bg }]}>
+        <View style={[styles.topBar, { paddingTop: topPad + 16 }]}>
+          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={24} color={fg} />
+          </Pressable>
+        </View>
+        <View style={styles.emptyCenter}>
+          <Text style={{ color: sub, fontSize: 16 }}>பாடம் கிடைக்கவில்லை</Text>
+        </View>
+      </View>
+    );
+  }
+
+  const fav = isFavorite(card.id);
+
+  return (
+    <View style={[styles.root, { backgroundColor: bg }]}>
+
+      {/* ── Top bar ── */}
+      <View style={[styles.topBar, { paddingTop: topPad + 8, backgroundColor: bg }]}>
+        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={24} color={fg} />
+        </Pressable>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.cardTitle, { color: fg }]} numberOfLines={2}>
+            {card.titleTa || card.titleEn}
+          </Text>
+          {!!(card.titleTa && card.titleEn) && (
+            <Text style={[styles.cardTitleEn, { color: sub }]} numberOfLines={1}>
+              {card.titleEn}
+            </Text>
+          )}
+        </View>
+        <Pressable
+          onPress={() => { fav ? removeFavorite(card.id) : addFavorite(card.id); }}
+          style={styles.favBtn}
+        >
+          <Ionicons
+            name={fav ? "heart" : "heart-outline"}
+            size={24}
+            color={fav ? "#ef4444" : sub}
+          />
+        </Pressable>
+      </View>
+
+      {/* ── Tab bar ── */}
+      <View style={[styles.tabBar, { backgroundColor: isDark ? "#111" : "#fff", borderBottomColor: isDark ? "#222" : "#d4ead9" }]}>
+        {TABS.map(tab => {
+          const active = activeTab === tab.key;
+          return (
+            <Pressable
+              key={tab.key}
+              onPress={() => setActiveTab(tab.key)}
+              style={[styles.tabItem, active && { borderBottomColor: "#1a7a4a", borderBottomWidth: 2 }]}
+            >
+              <Ionicons
+                name={tab.icon as any}
+                size={18}
+                color={active ? "#1a7a4a" : sub}
+              />
+              <Text style={[styles.tabLabel, { color: active ? "#1a7a4a" : sub, fontWeight: active ? "700" : "500" }]}>
+                {tab.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {/* ── Tab content ── */}
+      <View style={{ flex: 1, paddingBottom: botPad }}>
+        {activeTab === "explanation" && (
+          <AudioTab url={card.audioUrl} label="விளக்கம்" card={card} isDark={isDark} />
+        )}
+        {activeTab === "podcast" && (
+          <AudioTab url={card.podcastAudioUrl ?? ""} label="Podcast" card={{ ...card, audioUrl: card.podcastAudioUrl ?? "" }} isDark={isDark} />
+        )}
+        {activeTab === "quiz" && (
+          <QuizTab card={card} isDark={isDark} />
+        )}
+        {activeTab === "read" && (
+          <ReadTab content={card.readContent ?? ""} isDark={isDark} />
+        )}
+        {activeTab === "slide" && (
+          <SlideTab url={card.slideImageUrl ?? ""} isDark={isDark} />
+        )}
+      </View>
+
+      {/* ── Global mini player ── */}
+      <View style={[styles.playerBar, { bottom: botPad - (Platform.OS === "web" ? 84 : 60) }]}>
+        <AudioPlayer />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
+  root:        { flex: 1 },
+  emptyCenter: { flex: 1, alignItems: "center", justifyContent: "center" },
+
+  topBar: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 16, paddingBottom: 10,
   },
-  header: {
+  backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  favBtn:  { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  cardTitle:   { fontSize: 17, fontWeight: "800", lineHeight: 22 },
+  cardTitleEn: { fontSize: 12, marginTop: 2 },
+
+  tabBar: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingBottom: 16,
+    borderBottomWidth: 1,
+    paddingHorizontal: 4,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
+  tabItem: {
+    flex: 1, alignItems: "center", justifyContent: "center", gap: 3,
+    paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: "transparent",
   },
-  headerLabel: {
-    fontSize: 14,
-    fontWeight: "600",
+  tabLabel: { fontSize: 10 },
+
+  playerBar: { position: "absolute", left: 0, right: 0 },
+
+  // Audio tab
+  audioTab: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, gap: 16 },
+  audioArtwork: { width: 180, height: 180, borderRadius: 90, alignItems: "center", justifyContent: "center" },
+  audioTabTitle: { fontSize: 20, fontWeight: "800", textAlign: "center" },
+  audioTabDesc:  { fontSize: 14, textAlign: "center", lineHeight: 22 },
+  playBtn: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingVertical: 14, paddingHorizontal: 32, borderRadius: 16,
   },
-  shareBtn: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  artworkSection: {
-    alignItems: "center",
-    paddingVertical: 24,
-    paddingHorizontal: 40,
-  },
-  artworkBg: {
-    width: "100%",
-    aspectRatio: 1,
-    maxWidth: 280,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  artworkCircle: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  trackInfoSection: {
-    paddingHorizontal: 20,
-    gap: 10,
-    marginBottom: 20,
-  },
-  categoryBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  categoryBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  trackTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    lineHeight: 34,
-  },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 14,
-  },
-  metaItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  metaText: {
-    fontSize: 13,
-  },
-  premiumTag: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  premiumTagText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#c8a84b",
-  },
-  actionsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 16,
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  iconAction: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  playMain: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 16,
-    borderRadius: 16,
-  },
-  playMainText: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#000",
-  },
-  quizBtnWrapper: {
-    marginHorizontal: 20,
-    marginBottom: 24,
-    borderRadius: 14,
-    overflow: "hidden",
-  },
-  quizBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 16,
-  },
-  quizBtnText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#000",
-  },
-  relatedSection: {
-    paddingHorizontal: 16,
-  },
-  relatedTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 12,
-  },
-  emptyCenter: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  emptyText: {
-    fontSize: 16,
-  },
-  playerBar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-  },
+  playBtnTxt: { color: "#fff", fontSize: 16, fontWeight: "700" },
+
+  // Quiz tab
+  quizTab: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, gap: 16 },
+  quizArtwork: { width: 160, height: 160, borderRadius: 80, alignItems: "center", justifyContent: "center" },
+  quizTabTitle: { fontSize: 20, fontWeight: "800", textAlign: "center" },
+  quizTabSub:   { fontSize: 14, textAlign: "center" },
+
+  // Read tab
+  readScroll:  { flex: 1, paddingHorizontal: 20, paddingTop: 16 },
+  readContent: { fontSize: 16, lineHeight: 30 },
+
+  // Slide tab
+  slideCont:  { padding: 16, alignItems: "center" },
+  slideImage: { width: "100%", height: 500, borderRadius: 12 },
+
+  // Empty state
+  emptyTab:    { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 32 },
+  emptyTabTxt: { fontSize: 15, textAlign: "center", lineHeight: 22 },
 });

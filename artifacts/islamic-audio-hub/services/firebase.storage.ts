@@ -17,6 +17,29 @@ export interface UploadProgress {
 // On web, expo-document-picker returns an object URL that XHR cannot reliably
 // read. A hidden <input type="file"> gives us the actual File object (Blob).
 
+export function pickImageFileWeb(): Promise<File | null> {
+  return new Promise(resolve => {
+    const input = document.createElement("input");
+    input.type   = "file";
+    input.accept = "image/*";
+    input.style.display = "none";
+
+    input.onchange = (e: Event) => {
+      const file = (e.target as HTMLInputElement).files?.[0] ?? null;
+      if (document.body.contains(input)) document.body.removeChild(input);
+      resolve(file);
+    };
+
+    input.addEventListener("cancel", () => {
+      if (document.body.contains(input)) document.body.removeChild(input);
+      resolve(null);
+    });
+
+    document.body.appendChild(input);
+    input.click();
+  });
+}
+
 export function pickAudioFileWeb(): Promise<File | null> {
   return new Promise(resolve => {
     const input = document.createElement("input");
@@ -141,6 +164,58 @@ export async function uploadAudio(
     const msg = friendlyStorageError(e);
     console.error("[uploadAudio] Throwing:", msg, "|", e?.code, "|", e?.serverResponse);
     throw new Error(msg);
+  }
+}
+
+// ─── uploadImage ──────────────────────────────────────────────────────────────
+// Uploads an image file to Firebase Storage under slides/ folder
+
+export async function uploadImage(
+  source:      string | File,
+  fileName:    string,
+  onProgress?: (p: UploadProgress) => void,
+): Promise<string> {
+  try {
+    try { await ensureAdminSignedIn(); } catch {}
+
+    const storageRef: StorageReference = ref(storage, "slides/" + fileName);
+
+    let blob: Blob;
+    if (typeof source === "string") {
+      blob = await new Promise<Blob>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload  = () => { resolve(xhr.response as Blob); };
+        xhr.onerror = () => reject(new Error("XHR network error reading local file"));
+        xhr.responseType = "blob";
+        xhr.open("GET", source, true);
+        xhr.send(null);
+      });
+    } else {
+      blob = source;
+    }
+
+    if (blob.size === 0) throw new Error("தேர்ந்தெடுத்த படம் காலியாக உள்ளது (0 bytes).");
+
+    onProgress?.({ bytesTransferred: 0, totalBytes: blob.size, percent: 0 });
+
+    const contentType = blob.type || "image/jpeg";
+    const url = await new Promise<string>((resolve, reject) => {
+      const task = uploadBytesResumable(storageRef, blob, { contentType });
+      task.on(
+        "state_changed",
+        snap => {
+          const percent = snap.totalBytes > 0 ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100) : 0;
+          onProgress?.({ bytesTransferred: snap.bytesTransferred, totalBytes: snap.totalBytes, percent });
+        },
+        err => reject(err),
+        async () => {
+          try { resolve(await getDownloadURL(task.snapshot.ref)); } catch (e) { reject(e); }
+        },
+      );
+    });
+    return url;
+  } catch (e: any) {
+    throw new Error(friendlyStorageError(e));
   }
 }
 

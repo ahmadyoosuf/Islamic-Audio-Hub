@@ -46,22 +46,25 @@ export interface FBQuizQuestion {
 }
 
 export interface FBCard {
-  id:            string;
-  categoryId:    string;
-  subcategoryId: string;
-  titleTa:       string;
-  titleEn:       string;
-  audioUrl:      string;
-  duration:      number;
-  description:   string;
-  isPremium:     boolean;
-  hasQuiz:       boolean;
-  viewCount:     number;
-  sortOrder:     number;
-  quiz:          FBQuizQuestion[];
-  quizTitleTa:   string;
-  quizTitleEn:   string;
-  createdAt:     number;
+  id:                  string;
+  categoryId:          string;
+  subcategoryId:       string;
+  titleTa:             string;
+  titleEn:             string;
+  audioUrl:            string;
+  podcastAudioUrl:     string;
+  readContent:         string;
+  slideImageUrl:       string;
+  duration:            number;
+  description:         string;
+  isPremium:           boolean;
+  hasQuiz:             boolean;
+  viewCount:           number;
+  sortOrder:           number;
+  quiz:                FBQuizQuestion[];
+  quizTitleTa:         string;
+  quizTitleEn:         string;
+  createdAt:           number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -104,21 +107,24 @@ function toFBSubcategory(id: string, data: Record<string, any>): FBSubcategory {
 function toFBCard(id: string, data: Record<string, any>): FBCard {
   return {
     id,
-    categoryId:    data.categoryId    ?? "",
-    subcategoryId: data.subcategoryId ?? "",
-    titleTa:       data.titleTa       ?? "",
-    titleEn:       data.titleEn       ?? "",
-    audioUrl:      data.audioUrl      ?? "",
-    duration:      data.duration      ?? 0,
-    description:   data.description   ?? "",
-    isPremium:     data.isPremium      ?? false,
-    hasQuiz:       data.hasQuiz        ?? false,
-    viewCount:     data.viewCount      ?? 0,
-    sortOrder:     data.sortOrder      ?? 0,
-    quiz:          Array.isArray(data.quiz) ? data.quiz : [],
-    quizTitleTa:   data.quizTitleTa   ?? "",
-    quizTitleEn:   data.quizTitleEn   ?? "",
-    createdAt:     tsToMs(data.createdAt),
+    categoryId:      data.categoryId      ?? "",
+    subcategoryId:   data.subcategoryId   ?? "",
+    titleTa:         data.titleTa         ?? "",
+    titleEn:         data.titleEn         ?? "",
+    audioUrl:        data.audioUrl        ?? "",
+    podcastAudioUrl: data.podcastAudioUrl ?? "",
+    readContent:     data.readContent     ?? "",
+    slideImageUrl:   data.slideImageUrl   ?? "",
+    duration:        data.duration        ?? 0,
+    description:     data.description     ?? "",
+    isPremium:       data.isPremium       ?? false,
+    hasQuiz:         data.hasQuiz         ?? false,
+    viewCount:       data.viewCount       ?? 0,
+    sortOrder:       data.sortOrder       ?? 0,
+    quiz:            Array.isArray(data.quiz) ? data.quiz : [],
+    quizTitleTa:     data.quizTitleTa     ?? "",
+    quizTitleEn:     data.quizTitleEn     ?? "",
+    createdAt:       tsToMs(data.createdAt),
   };
 }
 

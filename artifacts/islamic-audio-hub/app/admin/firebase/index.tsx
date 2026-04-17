@@ -24,7 +24,7 @@ import {
   type FBSubcategory,
   type FBCard,
 } from "@/services/firebase.firestore";
-import { uploadAudio, pickAudioFileWeb, type UploadProgress } from "@/services/firebase.storage";
+import { uploadAudio, uploadImage, pickAudioFileWeb, pickImageFileWeb, type UploadProgress } from "@/services/firebase.storage";
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
@@ -55,6 +55,50 @@ function Field({ label, value, onChangeText, placeholder, multiline }: {
         multiline={multiline}
       />
     </View>
+  );
+}
+
+// ─── UploadRow ────────────────────────────────────────────────────────────────
+function UploadRow({ url, label, isImage, uploading, phase, percent, onUpload, onClear }: {
+  url: string; label: string; isImage?: boolean;
+  uploading: boolean; phase: "reading" | "uploading"; percent: number;
+  onUpload: () => void; onClear: () => void;
+}) {
+  if (url) {
+    return (
+      <View style={[s.audioRow, { backgroundColor: "#e8f5ee", borderColor: "#a8d8b8", marginBottom: 8 }]}>
+        <Ionicons name="checkmark-circle" size={18} color={C.green} />
+        <Text style={[s.audioTxt, { color: C.green, flex: 1 }]} numberOfLines={1}>
+          {isImage ? "🖼️ " : "🔊 "}{url.split("/").pop()?.split("?")[0]}
+        </Text>
+        <Pressable onPress={onClear} hitSlop={8}>
+          <Ionicons name="close-circle" size={16} color={C.red} />
+        </Pressable>
+      </View>
+    );
+  }
+  if (uploading) {
+    return (
+      <View style={s.uploadProgressWrap}>
+        <View style={s.audioRow}>
+          <ActivityIndicator size="small" color={C.green} />
+          <Text style={s.audioTxt}>
+            {phase === "reading" ? "📂 கோப்பு படிக்கிறது..." : `☁️ பதிவேற்றுகிறது… ${percent}%`}
+          </Text>
+        </View>
+        {phase === "uploading" && (
+          <View style={s.progressBar}>
+            <View style={[s.progressFill, { width: `${percent}%` as any }]} />
+          </View>
+        )}
+      </View>
+    );
+  }
+  return (
+    <TouchableOpacity style={[s.btn, { backgroundColor: C.gold, marginBottom: 8 }]} onPress={onUpload}>
+      <Ionicons name="cloud-upload-outline" size={16} color="#000" />
+      <Text style={[s.btnTxt, { color: "#000" }]}>📁 {label}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -402,7 +446,7 @@ function CardsView({
   const [cards,       setCards]       = useState<FBCard[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [saving,      setSaving]      = useState(false);
-  const [uploading,      setUploading]      = useState(false);
+  const [uploading,      setUploading]      = useState<"" | "audio" | "podcast" | "slide">("");
   const [uploadPhase,    setUploadPhase]    = useState<"reading" | "uploading">("reading");
   const [uploadPercent,  setUploadPercent]  = useState(0);
   const [showTypeModal, setShowTypeModal] = useState(false);
@@ -417,9 +461,10 @@ function CardsView({
   const [showFormat, setShowFormat] = useState(false);
 
   const [form, setForm] = useState<{
-    titleTa: string; titleEn: string; audioUrl: string; description: string;
+    titleTa: string; titleEn: string; description: string;
+    audioUrl: string; podcastAudioUrl: string; readContent: string; slideImageUrl: string;
     quiz: import("@/services/firebase.firestore").FBQuizQuestion[];
-  }>({ titleTa: "", titleEn: "", audioUrl: "", description: "", quiz: [] });
+  }>({ titleTa: "", titleEn: "", description: "", audioUrl: "", podcastAudioUrl: "", readContent: "", slideImageUrl: "", quiz: [] });
 
   // ── Strict Firestore query: only cards where subcategoryId == sub.id ─────
   const load = useCallback(async () => {
@@ -433,7 +478,7 @@ function CardsView({
   function cancelForm() {
     setShowForm(false);
     setEditId(null);
-    setForm({ titleTa: "", titleEn: "", audioUrl: "", description: "", quiz: [] });
+    setForm({ titleTa: "", titleEn: "", description: "", audioUrl: "", podcastAudioUrl: "", readContent: "", slideImageUrl: "", quiz: [] });
     setInputMode("manual");
     setPasteText(""); setPasteError(""); setParsedOk(false); setShowFormat(false);
   }
@@ -442,7 +487,12 @@ function CardsView({
 
   function openEdit(card: FBCard) {
     setEditId(card.id);
-    setForm({ titleTa: card.titleTa, titleEn: card.titleEn, audioUrl: card.audioUrl, description: card.description, quiz: card.quiz ?? [] });
+    setForm({
+      titleTa: card.titleTa, titleEn: card.titleEn, description: card.description,
+      audioUrl: card.audioUrl, podcastAudioUrl: card.podcastAudioUrl ?? "",
+      readContent: card.readContent ?? "", slideImageUrl: card.slideImageUrl ?? "",
+      quiz: card.quiz ?? [],
+    });
     setInputMode("manual");
     setPasteText(""); setPasteError(""); setParsedOk(false); setShowFormat(false);
     setShowForm(true);
@@ -459,7 +509,7 @@ function CardsView({
     setPasteError("");
   }
 
-  async function pickAndUploadAudio() {
+  async function pickAndUploadAudio(field: "audioUrl" | "podcastAudioUrl") {
     try {
       let source: string | File;
       let name: string;
@@ -474,15 +524,40 @@ function CardsView({
         const asset = result.assets[0];
         source = asset.uri; name = asset.name ?? "audio.mp3";
       }
-      setUploading(true); setUploadPhase("reading"); setUploadPercent(0);
+      const uploadKey = field === "audioUrl" ? "audio" : "podcast";
+      setUploading(uploadKey as any); setUploadPhase("reading"); setUploadPercent(0);
       const url = await uploadAudio(source, `${Date.now()}_${name}`, (p: UploadProgress) => {
         if (p.percent > 0) setUploadPhase("uploading");
         setUploadPercent(p.percent);
       });
-      setForm(f => ({ ...f, audioUrl: url }));
+      setForm(f => ({ ...f, [field]: url }));
       Alert.alert("✅ பதிவேற்றம் வெற்றி", `"${name}" Firebase Storage-ல் சேமிக்கப்பட்டது`);
     } catch (e: any) { Alert.alert("பிழை", e.message ?? "பதிவேற்றம் தோல்வி"); }
-    finally { setUploading(false); setUploadPhase("reading"); }
+    finally { setUploading(""); setUploadPhase("reading"); }
+  }
+
+  async function pickAndUploadSlide() {
+    try {
+      let source: string | File;
+      let name: string;
+      if (Platform.OS === "web") {
+        const file = await pickImageFileWeb();
+        if (!file) return;
+        if (file.size === 0) { Alert.alert("பிழை", `"${file.name}" படம் காலியாக உள்ளது`); return; }
+        source = file; name = file.name;
+      } else {
+        Alert.alert("தகவல்", "படம் upload நேரடியாக URL மூலம் சேர்க்கவும்.");
+        return;
+      }
+      setUploading("slide"); setUploadPhase("reading"); setUploadPercent(0);
+      const url = await uploadImage(source, `${Date.now()}_${name}`, (p: UploadProgress) => {
+        if (p.percent > 0) setUploadPhase("uploading");
+        setUploadPercent(p.percent);
+      });
+      setForm(f => ({ ...f, slideImageUrl: url }));
+      Alert.alert("✅ படம் வெற்றி", `"${name}" Firebase Storage-ல் சேமிக்கப்பட்டது`);
+    } catch (e: any) { Alert.alert("பிழை", e.message ?? "படம் பதிவேற்றம் தோல்வி"); }
+    finally { setUploading(""); setUploadPhase("reading"); }
   }
 
   async function save() {
@@ -492,12 +567,15 @@ function CardsView({
     try {
       const hasQuiz = form.quiz.length > 0;
       const payload = {
-        categoryId:    cat.id,
-        subcategoryId: sub.id,
-        titleTa:       form.titleTa.trim(),
-        titleEn:       form.titleEn.trim(),
-        audioUrl:      form.audioUrl.trim(),
-        description:   form.description.trim(),
+        categoryId:      cat.id,
+        subcategoryId:   sub.id,
+        titleTa:         form.titleTa.trim(),
+        titleEn:         form.titleEn.trim(),
+        audioUrl:        form.audioUrl.trim(),
+        podcastAudioUrl: form.podcastAudioUrl.trim(),
+        readContent:     form.readContent.trim(),
+        slideImageUrl:   form.slideImageUrl.trim(),
+        description:     form.description.trim(),
         isPremium: false,
         hasQuiz,
         quiz:       hasQuiz ? form.quiz : [],
@@ -674,41 +752,39 @@ function CardsView({
             </View>
           )}
 
-          {/* ── Audio (both modes) ── */}
-          <Text style={s.fieldLabel}>ஒலி கோப்பு</Text>
-          {form.audioUrl ? (
-            <View style={[s.audioRow, { backgroundColor: "#e8f5ee", borderColor: "#a8d8b8" }]}>
-              <Ionicons name="checkmark-circle" size={18} color={C.green} />
-              <Text style={[s.audioTxt, { color: C.green, flex: 1 }]} numberOfLines={1}>
-                {form.audioUrl.split("/").pop()?.split("?")[0]}
-              </Text>
-              <Pressable onPress={() => setForm(f => ({ ...f, audioUrl: "" }))} hitSlop={8}>
-                <Ionicons name="close-circle" size={16} color={C.red} />
-              </Pressable>
-            </View>
-          ) : uploading ? (
-            <View style={s.uploadProgressWrap}>
-              <View style={s.audioRow}>
-                <ActivityIndicator size="small" color={C.green} />
-                <Text style={s.audioTxt}>
-                  {uploadPhase === "reading"
-                    ? "📂 கோப்பு படிக்கிறது..."
-                    : `☁️ பதிவேற்றுகிறது… ${uploadPercent}%`}
-                </Text>
-              </View>
-              {uploadPhase === "uploading" && (
-                <View style={s.progressBar}>
-                  <View style={[s.progressFill, { width: `${uploadPercent}%` as any }]} />
-                </View>
-              )}
-            </View>
-          ) : (
-            <TouchableOpacity style={[s.btn, { backgroundColor: C.gold, marginBottom: 8 }]} onPress={pickAndUploadAudio}>
-              <Ionicons name="cloud-upload-outline" size={16} color="#000" />
-              <Text style={[s.btnTxt, { color: "#000" }]}>📁 ஒலி கோப்பு பதிவேற்று</Text>
-            </TouchableOpacity>
-          )}
+          {/* ── 1. Explanation Audio ── */}
+          <Text style={[s.sectionHeader]}>🔊 விளக்க ஒலி (Explanation Audio)</Text>
+          <UploadRow
+            url={form.audioUrl} label="ஒலி கோப்பு பதிவேற்று"
+            uploading={uploading === "audio"} phase={uploadPhase} percent={uploadPercent}
+            onUpload={() => pickAndUploadAudio("audioUrl")}
+            onClear={() => setForm(f => ({ ...f, audioUrl: "" }))}
+          />
           <Field label="அல்லது URL ஒட்டு" value={form.audioUrl} onChangeText={v => setForm(f => ({ ...f, audioUrl: v }))} placeholder="https://..." />
+
+          {/* ── 2. Podcast Audio ── */}
+          <Text style={[s.sectionHeader]}>🎙️ Podcast ஒலி</Text>
+          <UploadRow
+            url={form.podcastAudioUrl} label="Podcast கோப்பு பதிவேற்று"
+            uploading={uploading === "podcast"} phase={uploadPhase} percent={uploadPercent}
+            onUpload={() => pickAndUploadAudio("podcastAudioUrl")}
+            onClear={() => setForm(f => ({ ...f, podcastAudioUrl: "" }))}
+          />
+          <Field label="அல்லது Podcast URL" value={form.podcastAudioUrl} onChangeText={v => setForm(f => ({ ...f, podcastAudioUrl: v }))} placeholder="https://..." />
+
+          {/* ── 3. Read Content ── */}
+          <Text style={[s.sectionHeader]}>📖 படிக்கும் உரை (Read Content)</Text>
+          <Field label="உரை உள்ளடக்கம்" value={form.readContent} onChangeText={v => setForm(f => ({ ...f, readContent: v }))} multiline placeholder="இங்கே பாடத்தின் உரை எழுதவும்…" />
+
+          {/* ── 4. Slide Image ── */}
+          <Text style={[s.sectionHeader]}>🖼️ Slide படம்</Text>
+          <UploadRow
+            url={form.slideImageUrl} label="படம் பதிவேற்று" isImage
+            uploading={uploading === "slide"} phase={uploadPhase} percent={uploadPercent}
+            onUpload={pickAndUploadSlide}
+            onClear={() => setForm(f => ({ ...f, slideImageUrl: "" }))}
+          />
+          <Field label="அல்லது படம் URL" value={form.slideImageUrl} onChangeText={v => setForm(f => ({ ...f, slideImageUrl: v }))} placeholder="https://..." />
 
           <View style={s.formBtns}>
             <TouchableOpacity style={[s.btn, s.btnGray]} onPress={cancelForm}>
@@ -876,6 +952,8 @@ const s = StyleSheet.create({
   iconBtn:     { width: 32, height: 32, borderRadius: 8, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center" },
   quizPill:    { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
   quizPillTxt: { fontSize: 10, color: C.green, fontWeight: "700" },
+
+  sectionHeader: { fontSize: 13, fontWeight: "800", color: C.green, marginTop: 16, marginBottom: 8, borderLeftWidth: 3, borderLeftColor: C.green, paddingLeft: 8 },
 
   // ── Mode toggle ──
   modeToggle:    { flexDirection: "row", borderRadius: 10, borderWidth: 1, borderColor: C.border, overflow: "hidden", marginBottom: 16 },

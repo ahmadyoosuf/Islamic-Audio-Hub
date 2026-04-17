@@ -212,8 +212,9 @@ export default function HomeScreen() {
     });
   }, []);
 
-  // ── getUserToken — equivalent to the web function with the same name ────────
-  async function getUserToken() {
+  // ── enableNotifications — called when button is pressed ────────────────────
+  async function enableNotifications() {
+    console.log("Button clicked");
     if (!Device.isDevice) {
       console.log("[Notifications] Must use a physical device");
       return;
@@ -375,7 +376,7 @@ export default function HomeScreen() {
         {notifStatus !== "enabled" && (
           <TouchableOpacity
             nativeID="enableNotifications"
-            onPress={getUserToken}
+            onPress={enableNotifications}
             disabled={notifStatus === "loading"}
             activeOpacity={0.82}
             style={[
@@ -387,8 +388,8 @@ export default function HomeScreen() {
           >
             <Text style={styles.notifBtnTxt}>
               {notifStatus === "loading" ? "⏳ Enabling..."
-               : notifStatus === "denied" ? "🚫 Notifications Blocked"
-               : "🔔 Enable Notifications"}
+               : notifStatus === "denied"  ? "🚫 Notifications Blocked"
+               : "Enable Notifications"}
             </Text>
           </TouchableOpacity>
         )}

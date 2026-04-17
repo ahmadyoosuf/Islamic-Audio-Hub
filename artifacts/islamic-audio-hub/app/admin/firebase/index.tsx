@@ -546,8 +546,13 @@ function CardsView({
         if (file.size === 0) { Alert.alert("பிழை", `"${file.name}" படம் காலியாக உள்ளது`); return; }
         source = file; name = file.name;
       } else {
-        Alert.alert("தகவல்", "படம் upload நேரடியாக URL மூலம் சேர்க்கவும்.");
-        return;
+        const result = await DocumentPicker.getDocumentAsync({
+          type: ["image/*"],
+          copyToCacheDirectory: true,
+        });
+        if (result.canceled || !result.assets?.[0]) return;
+        const asset = result.assets[0];
+        source = asset.uri; name = asset.name ?? "slide.jpg";
       }
       setUploading("slide"); setUploadPhase("reading"); setUploadPercent(0);
       const url = await uploadImage(source, `${Date.now()}_${name}`, (p: UploadProgress) => {

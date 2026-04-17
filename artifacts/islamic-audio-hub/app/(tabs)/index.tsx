@@ -1,3 +1,5 @@
+import * as Device from "expo-device";
+import * as Notifications from "expo-notifications";
 import { useRouter, useFocusEffect } from "expo-router";
 import React, { useRef, useState, useCallback, useEffect } from "react";
 import {
@@ -198,8 +200,48 @@ export default function HomeScreen() {
   const { categories: fbCats, loading: fbCatsLoading, error: fbCatError } = useCategories();
   const { cards: fbCards } = useAllCards();
 
-  const [search,   setSearch]   = useState("");
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [search,      setSearch]      = useState("");
+  const [menuOpen,    setMenuOpen]    = useState(false);
+  const [notifStatus, setNotifStatus] = useState<"idle"|"loading"|"enabled"|"denied">("idle");
+
+  // ── equivalent to DOMContentLoaded — runs once after component is rendered ──
+  useEffect(() => {
+    // Check if permission was already granted on a previous visit
+    Notifications.getPermissionsAsync().then(({ status }) => {
+      if (status === "granted") setNotifStatus("enabled");
+    });
+  }, []);
+
+  // ── getUserToken — equivalent to the web function with the same name ────────
+  async function getUserToken() {
+    if (!Device.isDevice) {
+      console.log("[Notifications] Must use a physical device");
+      return;
+    }
+    setNotifStatus("loading");
+    try {
+      const { status: existing } = await Notifications.getPermissionsAsync();
+      let final = existing;
+
+      if (existing !== "granted") {
+        const { status } = await Notifications.requestPermissionsAsync();
+        final = status;
+      }
+
+      if (final !== "granted") {
+        console.log("[Notifications] Permission denied");
+        setNotifStatus("denied");
+        return;
+      }
+
+      const token = (await Notifications.getExpoPushTokenAsync()).data;
+      console.log("[Notifications] Token:", token);
+      setNotifStatus("enabled");
+    } catch (err) {
+      console.error("[Notifications] Error:", err);
+      setNotifStatus("idle");
+    }
+  }
 
   // Staggered card animation refs
   const cardAnims = useRef<Animated.Value[]>([]).current;
@@ -323,6 +365,33 @@ export default function HomeScreen() {
       >
         {/* Bismillah */}
         <BismillahBanner isDark={isDark} />
+
+        {/* ── 🔔 Enable Notifications button ─────────────────────────────────
+            nativeID="enableNotifications" is the React Native equivalent of
+            id="enableNotifications" in HTML.
+            onPress={getUserToken} replaces addEventListener("click", getUserToken).
+            useEffect above replaces document.addEventListener("DOMContentLoaded").
+        ──────────────────────────────────────────────────────────────────── */}
+        {notifStatus !== "enabled" && (
+          <TouchableOpacity
+            nativeID="enableNotifications"
+            onPress={getUserToken}
+            disabled={notifStatus === "loading"}
+            activeOpacity={0.82}
+            style={[
+              styles.notifBtn,
+              notifStatus === "denied"  && styles.notifBtnDenied,
+              notifStatus === "loading" && styles.notifBtnLoading,
+              { borderColor: isDark ? "#1e4a2e" : "#b8ddc0" },
+            ]}
+          >
+            <Text style={styles.notifBtnTxt}>
+              {notifStatus === "loading" ? "⏳ Enabling..."
+               : notifStatus === "denied" ? "🚫 Notifications Blocked"
+               : "🔔 Enable Notifications"}
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Firebase error banner — shown only when Firestore is blocked */}
         {fbCatError && fbCats.length === 0 && (
@@ -520,6 +589,19 @@ const styles = StyleSheet.create({
     borderRadius: 10, paddingHorizontal: 10, paddingVertical: 3,
   },
   sectionBadgeTxt: { fontSize: 12, fontWeight: "800" },
+
+  // 🔔 Notification button — equivalent to <button id="enableNotifications">
+  notifBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    backgroundColor: "#1a7a4a", borderWidth: 1,
+    borderRadius: 12, paddingVertical: 13, paddingHorizontal: 20,
+    marginBottom: 14,
+  },
+  notifBtnDenied:  { backgroundColor: "#6b7280" },
+  notifBtnLoading: { backgroundColor: "#5a9a6a" },
+  notifBtnTxt: {
+    color: "#fff", fontSize: 15, fontWeight: "700", letterSpacing: 0.2,
+  },
 
   // Firebase error banner
   fbErrorBanner: {

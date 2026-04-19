@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Speech from "expo-speech";
-import CoinPopup from "@/components/CoinPopup";
+import CoinPopup         from "@/components/CoinPopup";
+import BadgeUnlockPopup  from "@/components/BadgeUnlockPopup";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -16,7 +17,8 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "@/context/AppContext";
-import { useCoins } from "@/context/CoinsContext";
+import { useCoins }  from "@/context/CoinsContext";
+import { useBadges } from "@/context/BadgesContext";
 import type { FBCard, FBQuizQuestion } from "@/services/firebase.firestore";
 import { getUserId } from "@/services/userId";
 import {
@@ -123,7 +125,8 @@ function StarRow({ score, total }: { score: number; total: number }) {
 export default function DailyQuizModal({ visible, onClose, allCards }: DailyQuizModalProps) {
   const insets      = useSafeAreaInsets();
   const { isDarkMode } = useApp();
-  const { addCoins } = useCoins();
+  const { addCoins }   = useCoins();
+  const { checkAndAward, checkDaily7 } = useBadges();
 
   const bg     = isDarkMode ? "#0a0a0a" : "#f5f5f5";
   const card   = isDarkMode ? "#1a1a1a" : "#ffffff";
@@ -312,6 +315,8 @@ export default function DailyQuizModal({ visible, onClose, allCards }: DailyQuiz
     playSound("complete");
     // Daily quiz completion bonus
     addCoins(30, "daily_quiz_bonus", `Daily Quiz – ${dateStr} completed`);
+    // Check 7-day streak badge
+    checkDaily7();
     setPhase("result");
   }
 
@@ -329,6 +334,7 @@ export default function DailyQuizModal({ visible, onClose, allCards }: DailyQuiz
     <Modal visible={visible} animationType="slide" onRequestClose={handleClose} statusBarTranslucent>
       <View style={[s.root, { backgroundColor: bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <CoinPopup />
+        <BadgeUnlockPopup />
 
         {/* ━━━ LOADING ━━━ */}
         {phase === "loading" && (

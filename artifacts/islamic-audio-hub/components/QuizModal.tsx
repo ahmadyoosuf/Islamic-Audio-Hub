@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Speech from "expo-speech";
-import CoinPopup from "@/components/CoinPopup";
+import CoinPopup         from "@/components/CoinPopup";
+import BadgeUnlockPopup  from "@/components/BadgeUnlockPopup";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -30,7 +31,8 @@ import {
 } from "@/data/quizProgress";
 import type { FBQuizQuestion } from "@/services/firebase.firestore";
 import { getUserId } from "@/services/userId";
-import { useCoins } from "@/context/CoinsContext";
+import { useCoins }  from "@/context/CoinsContext";
+import { useBadges } from "@/context/BadgesContext";
 import {
   saveProgressToCloud,
   loadProgressFromCloud,
@@ -171,7 +173,8 @@ export default function QuizModal({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDarkMode } = useApp();
-  const { addCoins } = useCoins();
+  const { addCoins }        = useCoins();
+  const { checkAndAward }   = useBadges();
 
   const bg     = isDarkMode ? "#0a0a0a" : "#f5f5f5";
   const card   = isDarkMode ? "#1a1a1a" : "#ffffff";
@@ -444,11 +447,13 @@ export default function QuizModal({
     }]);
 
     if (correct) {
+      const newStreak = streak + 1;
       scoreRef.current += 1;
       setScore(scoreRef.current);
-      setStreak(s => s + 1);
+      setStreak(newStreak);
       playSoundFor("correct");
       addCoins(10, "quiz_reward", `Correct answer – ${trackTitle}`);
+      if (newStreak === 5) checkAndAward("STREAK_5");
     } else {
       setStreak(0);
       playSoundFor("wrong");
@@ -511,10 +516,15 @@ export default function QuizModal({
     const uid = userId || await getUserId();
     saveProgressToCloud(uid, trackId, activeLevel, result);
 
-    // Bonus coins for full score
+    // Full score bonus
     if (finalScore === total && total > 0) {
       addCoins(50, "full_score_bonus", `Perfect score – ${trackTitle} Level ${activeLevel}`);
+      checkAndAward("FULL_SCORE");
     }
+
+    // Level Master: check if ALL 3 levels completed
+    const allCompleted = LEVEL_CFG.every(l => fresh[`level${l.id}` as keyof typeof fresh]?.completed);
+    if (allCompleted) checkAndAward("LEVEL_MASTER");
 
     // Save to leaderboard
     saveScore({
@@ -561,6 +571,7 @@ export default function QuizModal({
     <Modal visible={visible} animationType="slide" onRequestClose={handleClose} statusBarTranslucent>
       <View style={[s.root, { backgroundColor: bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <CoinPopup />
+        <BadgeUnlockPopup />
 
         {/* ━━━ LEVEL SELECT ━━━ */}
         {phase === "select" && (

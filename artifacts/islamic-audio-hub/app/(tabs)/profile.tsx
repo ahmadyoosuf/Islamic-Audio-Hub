@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import {
+  Dimensions,
   Platform,
   Pressable,
   ScrollView,
@@ -9,13 +10,13 @@ import {
   Text,
   TouchableOpacity,
   View,
-
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import AudioPlayer from "@/components/AudioPlayer";
-import { useApp } from "@/context/AppContext";
-
+import { useApp }    from "@/context/AppContext";
+import { useBadges } from "@/context/BadgesContext";
+import { BADGE_DEFS, type BadgeId } from "@/services/badges.firebase";
 import { useColors } from "@/hooks/useColors";
 
 export default function ProfileScreen() {
@@ -23,6 +24,7 @@ export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { favorites, recentTracks, isDarkMode, toggleDarkMode, playbackProgress } = useApp();
+  const { earnedBadges } = useBadges();
   const isDark = isDarkMode;
 
   const totalListened = Object.values(playbackProgress).reduce(
@@ -101,6 +103,53 @@ export default function ProfileScreen() {
             isDark={isDark}
             colors={colors}
           />
+        </View>
+
+        {/* ── Badges ─────────────────────────────────────────────────── */}
+        <View style={[styles.badgeSection, { backgroundColor: isDark ? "#111" : "#fff" }]}>
+          <View style={styles.badgeHeader}>
+            <Text style={[styles.badgeTitle, { color: isDark ? "#f0f0f0" : "#111" }]}>
+              Badges / சாதனைகள்
+            </Text>
+            <View style={[styles.badgeCount, { backgroundColor: "#c8a84b22" }]}>
+              <Text style={styles.badgeCountTxt}>
+                {earnedBadges.size}/{Object.keys(BADGE_DEFS).length}
+              </Text>
+            </View>
+          </View>
+          <View style={styles.badgeGrid}>
+            {(Object.values(BADGE_DEFS) as typeof BADGE_DEFS[BadgeId][]).map(badge => {
+              const earned = earnedBadges.has(badge.id as BadgeId);
+              return (
+                <View
+                  key={badge.id}
+                  style={[
+                    styles.badgeCard,
+                    {
+                      backgroundColor: earned
+                        ? (isDark ? badge.color + "22" : badge.color + "15")
+                        : (isDark ? "#1a1a1a" : "#f5f5f5"),
+                      borderColor: earned ? badge.color + "55" : (isDark ? "#2a2a2a" : "#e0e0e0"),
+                      opacity: earned ? 1 : 0.55,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.badgeIcon, { opacity: earned ? 1 : 0.35 }]}>
+                    {earned ? badge.icon : "🔒"}
+                  </Text>
+                  <Text style={[styles.badgeName, { color: earned ? badge.color : (isDark ? "#555" : "#aaa") }]}>
+                    {badge.titleTa}
+                  </Text>
+                  <Text style={[styles.badgeDesc, { color: isDark ? "#555" : "#bbb" }]} numberOfLines={2}>
+                    {earned ? badge.descTa : "இன்னும் கிடைக்கவில்லை"}
+                  </Text>
+                  {earned && (
+                    <View style={[styles.earnedDot, { backgroundColor: badge.color }]} />
+                  )}
+                </View>
+              );
+            })}
+          </View>
         </View>
 
         <View style={styles.subscribeCard}>
@@ -318,9 +367,76 @@ function SettingRow({
   );
 }
 
+const SCREEN_W = Dimensions.get("window").width;
+const BADGE_CARD_W = (SCREEN_W - 32 - 10) / 2;
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+  },
+
+  // Badge section
+  badgeSection: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 16,
+    padding: 16,
+    overflow: "hidden",
+  },
+  badgeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
+  badgeTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  badgeCount: {
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  badgeCountTxt: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#c8a84b",
+  },
+  badgeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  badgeCard: {
+    width: BADGE_CARD_W,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    padding: 14,
+    alignItems: "center",
+    gap: 6,
+    position: "relative",
+  },
+  badgeIcon: {
+    fontSize: 38,
+  },
+  badgeName: {
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  badgeDesc: {
+    fontSize: 10,
+    textAlign: "center",
+    lineHeight: 14,
+  },
+  earnedDot: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   profileHeader: {
     marginHorizontal: 16,

@@ -14,6 +14,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import AudioPlayer from "@/components/AudioPlayer";
+import CoinBadge from "@/components/CoinBadge";
+import CoinPopup from "@/components/CoinPopup";
 import DailyQuizModal from "@/components/DailyQuizModal";
 import { useAudio } from "@/context/AudioContext";
 import { useApp } from "@/context/AppContext";
@@ -331,13 +333,16 @@ export default function HomeScreen() {
             <Text style={[styles.appSub, { color: textSub }]}>செவிகள் சிறக்கட்டும்!</Text>
           </View>
         </View>
-        <TouchableOpacity
-          style={[styles.menuBtn, { backgroundColor: isDark ? "#1a2e20" : C.greenLight, borderColor: isDark ? C.green + "44" : "#b8ddc0" }]}
-          onPress={() => setMenuOpen(v => !v)}
-          activeOpacity={0.75}
-        >
-          <Ionicons name={menuOpen ? "close" : "menu"} size={22} color={C.green} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <CoinBadge isDark={isDark} />
+          <TouchableOpacity
+            style={[styles.menuBtn, { backgroundColor: isDark ? "#1a2e20" : C.greenLight, borderColor: isDark ? C.green + "44" : "#b8ddc0" }]}
+            onPress={() => setMenuOpen(v => !v)}
+            activeOpacity={0.75}
+          >
+            <Ionicons name={menuOpen ? "close" : "menu"} size={22} color={C.green} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* ─── DROPDOWN MENU ─── */}
@@ -519,6 +524,7 @@ export default function HomeScreen() {
         <View style={{ height: 140 }} />
       </ScrollView>
 
+      <CoinPopup />
       <AudioPlayer />
 
       {/* Daily Quiz Modal */}

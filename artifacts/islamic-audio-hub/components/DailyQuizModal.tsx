@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Speech from "expo-speech";
+import CoinPopup from "@/components/CoinPopup";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -15,6 +16,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useApp } from "@/context/AppContext";
+import { useCoins } from "@/context/CoinsContext";
 import type { FBCard, FBQuizQuestion } from "@/services/firebase.firestore";
 import { getUserId } from "@/services/userId";
 import {
@@ -121,6 +123,7 @@ function StarRow({ score, total }: { score: number; total: number }) {
 export default function DailyQuizModal({ visible, onClose, allCards }: DailyQuizModalProps) {
   const insets      = useSafeAreaInsets();
   const { isDarkMode } = useApp();
+  const { addCoins } = useCoins();
 
   const bg     = isDarkMode ? "#0a0a0a" : "#f5f5f5";
   const card   = isDarkMode ? "#1a1a1a" : "#ffffff";
@@ -258,6 +261,7 @@ export default function DailyQuizModal({ visible, onClose, allCards }: DailyQuiz
       scoreRef.current += 1;
       setScore(scoreRef.current);
       playSound("correct");
+      addCoins(10, "quiz_reward", "Daily Quiz correct answer");
     } else {
       playSound("wrong");
     }
@@ -306,6 +310,8 @@ export default function DailyQuizModal({ visible, onClose, allCards }: DailyQuiz
     await saveDailyResult(userId, dateStr, result);
     setPrevResult(result);
     playSound("complete");
+    // Daily quiz completion bonus
+    addCoins(30, "daily_quiz_bonus", `Daily Quiz – ${dateStr} completed`);
     setPhase("result");
   }
 
@@ -322,6 +328,7 @@ export default function DailyQuizModal({ visible, onClose, allCards }: DailyQuiz
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={handleClose} statusBarTranslucent>
       <View style={[s.root, { backgroundColor: bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <CoinPopup />
 
         {/* ━━━ LOADING ━━━ */}
         {phase === "loading" && (

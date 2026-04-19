@@ -16,6 +16,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider } from "@/context/AppContext";
 import { AudioProvider } from "@/context/AudioContext";
+import { CoinsProvider } from "@/context/CoinsContext";
 
 // ─── One-time cleanup of legacy seeded AsyncStorage data ─────────────────────
 // Removes built-in categories/tracks that were auto-seeded by old code.
@@ -94,11 +95,13 @@ export default function RootLayout() {
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
           <AppProvider>
-            <AudioProvider>
-              <GestureHandlerRootView style={{ flex: 1 }}>
-                <RootLayoutNav />
-              </GestureHandlerRootView>
-            </AudioProvider>
+            <CoinsProvider>
+              <AudioProvider>
+                <GestureHandlerRootView style={{ flex: 1 }}>
+                  <RootLayoutNav />
+                </GestureHandlerRootView>
+              </AudioProvider>
+            </CoinsProvider>
           </AppProvider>
         </QueryClientProvider>
       </ErrorBoundary>

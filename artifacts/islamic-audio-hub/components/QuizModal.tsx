@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as Speech from "expo-speech";
+import CoinPopup from "@/components/CoinPopup";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -29,6 +30,7 @@ import {
 } from "@/data/quizProgress";
 import type { FBQuizQuestion } from "@/services/firebase.firestore";
 import { getUserId } from "@/services/userId";
+import { useCoins } from "@/context/CoinsContext";
 import {
   saveProgressToCloud,
   loadProgressFromCloud,
@@ -169,6 +171,7 @@ export default function QuizModal({
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDarkMode } = useApp();
+  const { addCoins } = useCoins();
 
   const bg     = isDarkMode ? "#0a0a0a" : "#f5f5f5";
   const card   = isDarkMode ? "#1a1a1a" : "#ffffff";
@@ -445,6 +448,7 @@ export default function QuizModal({
       setScore(scoreRef.current);
       setStreak(s => s + 1);
       playSoundFor("correct");
+      addCoins(10, "quiz_reward", `Correct answer – ${trackTitle}`);
     } else {
       setStreak(0);
       playSoundFor("wrong");
@@ -507,6 +511,11 @@ export default function QuizModal({
     const uid = userId || await getUserId();
     saveProgressToCloud(uid, trackId, activeLevel, result);
 
+    // Bonus coins for full score
+    if (finalScore === total && total > 0) {
+      addCoins(50, "full_score_bonus", `Perfect score – ${trackTitle} Level ${activeLevel}`);
+    }
+
     // Save to leaderboard
     saveScore({
       userId:     uid,
@@ -551,6 +560,7 @@ export default function QuizModal({
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={handleClose} statusBarTranslucent>
       <View style={[s.root, { backgroundColor: bg, paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+        <CoinPopup />
 
         {/* ━━━ LEVEL SELECT ━━━ */}
         {phase === "select" && (

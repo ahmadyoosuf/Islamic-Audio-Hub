@@ -35,3 +35,9 @@ id = "bmIOHJSh_LR8SUEwe8B1D"
 uri = "file://artifacts/islamic-audio-hub/QUIZ_BUILD_PROMPT.md"
 type = "text"
 title = "Quiz Build Prompt — Choose Answer Feature"
+
+[[outputs]]
+id = "BALji-nrr4ekmY0FMIAOs"
+uri = "file://artifacts/islamic-audio-hub/QUIZ_SYSTEM_AUDIT.md"
+type = "text"
+title = "Quiz System — Full Audit Report"

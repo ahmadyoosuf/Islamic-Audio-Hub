@@ -1,0 +1,96 @@
+Analyze my entire quiz system project and generate a complete structured breakdown of all features, UI/UX, logic, and architecture.
+
+I want a FULL detailed report of what has already been built in my app.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+INCLUDE THESE SECTIONS:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. OVERVIEW:
+
+* What type of quiz system this is
+* Main concept (daily quiz, levels, etc.)
+
+2. QUIZ STRUCTURE:
+
+* Number of questions per quiz
+* Total quizzes / daily system
+* Question format (MCQ, options, correct answer logic)
+
+3. LEVEL SYSTEM:
+
+* How many levels exist
+* Level names and difficulty
+* Unlock rules between levels
+
+4. USER FLOW (STEP-BY-STEP):
+
+* From app open → quiz → result
+* All screens involved
+
+5. UI / UX DESIGN:
+
+* Screen list (Login, Home, Quiz, Result, etc.)
+* Key UI elements (progress bar, streak, animations, etc.)
+* Dark/Light mode support
+
+6. GAME MECHANICS:
+
+* Scoring system
+* Streak system
+* Timer (if exists)
+* Attempt limits (if exists)
+
+7. AUDIO / VOICE FEATURES:
+
+* TTS (Text-To-Speech) behavior
+* Voice toggle system
+* Sound / haptics system
+
+8. DATA STORAGE:
+
+* How data is stored (Firestore / local storage)
+* Quiz data structure
+* User progress tracking
+
+9. LEADERBOARD / RANKING:
+
+* Whether leaderboard exists
+* How ranking is calculated
+
+10. STATE MANAGEMENT:
+
+* How quiz state is handled (playing, result, etc.)
+
+11. ANIMATIONS:
+
+* What animations are used
+
+12. PLATFORM SUPPORT:
+
+* Web vs Mobile differences
+
+13. CURRENT FEATURES LIST:
+
+* Bullet list of ALL implemented features
+
+14. MISSING FEATURES / GAPS:
+
+* What important features are NOT implemented yet
+
+15. FUTURE IMPROVEMENT SUGGESTIONS:
+
+* What can be added to make this a production-level app
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IMPORTANT:
+
+* Do NOT write code
+* Only explain clearly
+* Be very detailed and structured
+* Assume I want to audit my system
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Output should be clean, well-organized, and easy to review.

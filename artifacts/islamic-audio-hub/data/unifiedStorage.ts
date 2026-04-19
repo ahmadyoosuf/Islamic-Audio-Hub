@@ -53,6 +53,7 @@ export interface UnifiedQuiz {
   options: string[];
   correctIndex: number;
   addedAt: number;
+  explanation?: string;
 }
 
 // ─── SAFE JSON PARSE ─────────────────────────────────────────────────────────

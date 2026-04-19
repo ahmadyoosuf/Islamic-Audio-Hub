@@ -43,6 +43,7 @@ export interface FBQuizQuestion {
   question:     string;
   options:      string[];
   correctIndex: number;
+  explanation?: string;   // shown after wrong answer
 }
 
 export interface FBCard {

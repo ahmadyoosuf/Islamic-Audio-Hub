@@ -1,0 +1,167 @@
+You are working on an existing React Native (Expo) quiz app.
+
+IMPORTANT:
+Do NOT rewrite the entire app.
+Do NOT break existing features.
+Only EXTEND and IMPROVE the current system.
+
+Analyze the existing quiz system and implement the following upgrades step-by-step.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. USER ID SYSTEM
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* Generate a unique userId on first app open
+* Format: U0001, U0002, etc.
+* Store in AsyncStorage with key: "user_id_v1"
+* If already exists, reuse it
+* Also create a Firestore document:
+  users/{userId}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. CLOUD PROGRESS SYNC (CRITICAL)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* Keep existing AsyncStorage logic (DO NOT REMOVE)
+* Add Firestore sync in parallel
+
+Firestore structure:
+users/{userId}/progress/{cardId}
+
+{
+level1: { completed, score, total, completedAt },
+level2: { completed, score, total, completedAt },
+level3: { completed, score, total, completedAt }
+}
+
+* On quiz complete:
+  → Save to AsyncStorage
+  → Save same data to Firestore
+
+* On app load:
+  → Try loading from Firestore first
+  → If not available, fallback to AsyncStorage
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. ATTEMPT LIMIT SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* Each user can attempt each level ONLY 3 times per day
+
+Store attempts:
+users/{userId}/attempts/{cardId_level}
+
+{
+date: "YYYY-MM-DD",
+count: number
+}
+
+Rules:
+
+* If date changes → reset count
+* If count >= 3 → block quiz start
+
+UI:
+
+* Disable level card
+* Show message: "இன்றைய முயற்சிகள் முடிந்துவிட்டது"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. LEADERBOARD SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Create collection:
+quizScores
+
+Each attempt saves:
+{
+userId,
+cardId,
+level,
+score,
+total,
+percentage,
+timeTaken,
+createdAt
+}
+
+Leaderboard logic:
+
+* Sort by:
+
+  1. score (DESC)
+  2. timeTaken (ASC)
+
+UI:
+
+* Create Leaderboard Screen
+* Show:
+  🥇🥈🥉 rank
+  userId (NOT name)
+  percentage
+  score
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. TIMER SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Add timer to quiz:
+
+Option A:
+
+* 15 seconds per question
+
+OR
+
+Option B:
+
+* Total quiz timer (e.g. 5–10 minutes)
+
+Behavior:
+
+* If time runs out → auto-submit
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. EXPLANATION FEATURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Update question structure:
+
+{
+question,
+options,
+correctIndex,
+explanation
+}
+
+UI:
+
+* If answer is wrong:
+  → Show explanation below question
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. REVIEW SCREEN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+After result screen:
+
+* Add "Review Answers" button
+
+Review screen shows:
+
+* All questions
+* User answer
+* Correct answer
+* Explanation
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GENERAL RULES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* Keep Tamil UI intact
+* Do not remove existing TTS, animations, or levels
+* Follow existing component structure
+* Write clean, modular code
+* Add comments where needed
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Goal:
+Upgrade this app from a basic quiz system into a scalable, competitive quiz platform.

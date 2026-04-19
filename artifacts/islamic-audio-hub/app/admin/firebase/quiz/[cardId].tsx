@@ -131,6 +131,7 @@ const BLANK_FORM = {
   optC:         "",
   optD:         "",
   correctIndex: -1 as number,
+  explanation:  "",
 };
 
 type QuestionForm = typeof BLANK_FORM;
@@ -139,7 +140,9 @@ type QuestionForm = typeof BLANK_FORM;
 
 function formToQuestion(f: QuestionForm): FBQuizQuestion {
   const options = [f.optA, f.optB, f.optC, f.optD].filter(o => o.trim() !== "");
-  return { question: f.question.trim(), options, correctIndex: f.correctIndex };
+  const q: FBQuizQuestion = { question: f.question.trim(), options, correctIndex: f.correctIndex };
+  if (f.explanation.trim()) q.explanation = f.explanation.trim();
+  return q;
 }
 
 function questionToForm(q: FBQuizQuestion): QuestionForm {
@@ -150,6 +153,7 @@ function questionToForm(q: FBQuizQuestion): QuestionForm {
     optC:         q.options[2] ?? "",
     optD:         q.options[3] ?? "",
     correctIndex: q.correctIndex,
+    explanation:  q.explanation ?? "",
   };
 }
 
@@ -818,6 +822,20 @@ export default function QuizEditorScreen() {
                 </Text>
               </View>
             )}
+
+            {/* Explanation (optional) */}
+            <View style={s.fieldWrap}>
+              <Text style={s.fieldLabel}>விளக்கம் (Explanation) — optional</Text>
+              <TextInput
+                style={[s.input, { minHeight: 64, textAlignVertical: "top" }]}
+                value={form.explanation}
+                onChangeText={v => setForm(f => ({ ...f, explanation: v }))}
+                placeholder="தவறான விடைக்கு பிறகு காட்டப்படும் விளக்கம்"
+                placeholderTextColor="#9abca4"
+                multiline
+                numberOfLines={3}
+              />
+            </View>
 
             {formErrors.length > 0 && (
               <View style={s.formErrBox}>

@@ -14,11 +14,13 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import AudioPlayer from "@/components/AudioPlayer";
+import DailyQuizModal from "@/components/DailyQuizModal";
 import { useAudio } from "@/context/AudioContext";
 import { useApp } from "@/context/AppContext";
 import type { StoredCategory, UnifiedTrack } from "@/data/unifiedStorage";
 import { useCategories, useAllCards } from "@/hooks/useFirebaseData";
 import type { FBCategory, FBCard } from "@/services/firebase.firestore";
+import { todayKey, formatDateTa } from "@/services/dailyQuiz.firebase";
 
 // ─── Adapters ─────────────────────────────────────────────────────────────────
 function fbCatToStored(c: FBCategory): StoredCategory {
@@ -189,6 +191,51 @@ function BismillahBanner({ isDark }: { isDark: boolean }) {
   );
 }
 
+// ─── Daily Quiz Banner ────────────────────────────────────────────────────────
+function DailyQuizBanner({ isDark, onPress }: { isDark: boolean; onPress: () => void }) {
+  const today = todayKey();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.dailyCard,
+        {
+          backgroundColor: isDark ? "#12102a" : "#f0f0ff",
+          borderColor:     isDark ? "#6366f144" : "#818cf8",
+          opacity:         pressed ? 0.88 : 1,
+        },
+      ]}
+    >
+      {/* Left gradient strip */}
+      <View style={[styles.dailyStripe, { backgroundColor: "#6366f1" }]} />
+
+      {/* Icon */}
+      <View style={[styles.dailyIcon, { backgroundColor: "#6366f122" }]}>
+        <Text style={{ fontSize: 26 }}>📅</Text>
+      </View>
+
+      {/* Text */}
+      <View style={{ flex: 1 }}>
+        <View style={[styles.dailyBadge, { backgroundColor: "#6366f1" }]}>
+          <Ionicons name="flash" size={10} color="#fff" />
+          <Text style={styles.dailyBadgeTxt}>DAILY QUIZ</Text>
+        </View>
+        <Text style={[styles.dailyTitle, { color: isDark ? "#e0e0ff" : "#1e1b4b" }]}>
+          இன்றைய Quiz
+        </Text>
+        <Text style={[styles.dailyDate, { color: isDark ? "#8880cc" : "#6366f1" }]}>
+          {formatDateTa(today)}
+        </Text>
+      </View>
+
+      {/* Arrow */}
+      <View style={[styles.dailyArrow, { backgroundColor: "#6366f122", borderColor: "#6366f144" }]}>
+        <Ionicons name="arrow-forward" size={16} color="#6366f1" />
+      </View>
+    </Pressable>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const router = useRouter();
@@ -198,8 +245,9 @@ export default function HomeScreen() {
   const { categories: fbCats, loading: fbCatsLoading, error: fbCatError } = useCategories();
   const { cards: fbCards } = useAllCards();
 
-  const [search,   setSearch]   = useState("");
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [search,        setSearch]        = useState("");
+  const [menuOpen,      setMenuOpen]      = useState(false);
+  const [dailyQuizOpen, setDailyQuizOpen] = useState(false);
 
   // Use the SINGLE global audio player — no local sound instances
   const { playTrack: globalPlay, togglePlay, isPlaying, currentTrack } = useAudio();
@@ -347,6 +395,9 @@ export default function HomeScreen() {
         {/* Bismillah */}
         <BismillahBanner isDark={isDark} />
 
+        {/* Daily Quiz Banner */}
+        <DailyQuizBanner isDark={isDark} onPress={() => setDailyQuizOpen(true)} />
+
         {/* ── Play Audio demo — routed through global AudioContext ─────── */}
         {(() => {
           const isDemoActive = currentTrack?.id === "__demo__";
@@ -469,6 +520,13 @@ export default function HomeScreen() {
       </ScrollView>
 
       <AudioPlayer />
+
+      {/* Daily Quiz Modal */}
+      <DailyQuizModal
+        visible={dailyQuizOpen}
+        onClose={() => setDailyQuizOpen(false)}
+        allCards={fbCards}
+      />
     </SafeAreaView>
   );
 }
@@ -533,6 +591,21 @@ const styles = StyleSheet.create({
   },
   bismillahAr: { fontSize: 17, fontWeight: "700", textAlign: "center" },
   bismillahTa: { fontSize: 11, fontWeight: "500" },
+
+  // Daily Quiz Card
+  dailyCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    borderRadius: 16, borderWidth: 1.5, overflow: "hidden",
+    paddingVertical: 14, paddingRight: 14, paddingLeft: 12,
+    marginBottom: 14,
+  },
+  dailyStripe:   { position: "absolute", left: 0, top: 0, bottom: 0, width: 4 },
+  dailyIcon:     { width: 52, height: 52, borderRadius: 14, alignItems: "center", justifyContent: "center" },
+  dailyBadge:    { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 8, alignSelf: "flex-start", marginBottom: 4 },
+  dailyBadgeTxt: { fontSize: 9, fontWeight: "900", color: "#fff", letterSpacing: 0.5 },
+  dailyTitle:    { fontSize: 16, fontWeight: "800" },
+  dailyDate:     { fontSize: 11, marginTop: 2, fontWeight: "500" },
+  dailyArrow:    { width: 34, height: 34, borderRadius: 10, borderWidth: 1, alignItems: "center", justifyContent: "center" },
 
   // Featured
   featured: {

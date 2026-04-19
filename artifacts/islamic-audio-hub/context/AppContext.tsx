@@ -6,6 +6,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
+import { useColorScheme } from "react-native";
 
 export interface Track {
   id: string;
@@ -58,16 +59,26 @@ interface AppContextType {
 const AppContext = createContext<AppContextType>({} as AppContextType);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const systemScheme = useColorScheme();
   const [favorites, setFavorites] = useState<string[]>([]);
   const [playbackProgress, setPlaybackProgress] = useState<
     Record<string, PlaybackProgress>
   >({});
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(systemScheme === "dark");
   const [recentTracks, setRecentTracks] = useState<Track[]>([]);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  // Auto-sync with system theme changes (only if user hasn't overridden)
+  useEffect(() => {
+    AsyncStorage.getItem("isDarkMode").then(saved => {
+      if (saved === null) {
+        setIsDarkMode(systemScheme === "dark");
+      }
+    }).catch(() => {});
+  }, [systemScheme]);
 
   const loadData = async () => {
     try {
@@ -80,6 +91,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (favs) setFavorites(JSON.parse(favs));
       if (progress) setPlaybackProgress(JSON.parse(progress));
       if (dark !== null) setIsDarkMode(JSON.parse(dark));
+      else setIsDarkMode(systemScheme === "dark");
       if (recent) setRecentTracks(JSON.parse(recent));
     } catch {}
   };

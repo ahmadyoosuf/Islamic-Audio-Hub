@@ -1,0 +1,107 @@
+Enhance my React Native Expo app with HEADER MENU + LOGIN/LOGOUT TOGGLE + QUIZ ACCESS CONTROL.
+
+IMPORTANT:
+
+* Do NOT break existing quiz system
+* Fix login state UI updates
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. GLOBAL AUTH STATE
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* Create auth state:
+  isLoggedIn = !!active_user_id
+
+* On app load:
+  load active_user_id from AsyncStorage
+  set isLoggedIn
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. HEADER MENU BUTTON
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* Add button in top-right (next to score)
+
+* On press:
+  open dropdown menu
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. MENU ITEMS LOGIC
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IF isLoggedIn = false:
+
+* Show:
+  🔐 Login (green button)
+  🧠 Quiz
+
+* On Quiz click:
+  → Navigate to Login screen
+
+IF isLoggedIn = true:
+
+* Show:
+  🧠 Quiz
+  👤 Profile
+  ⚙️ Admin Panel (optional)
+  🚪 Logout (red button)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. LOGIN ACTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* On login success:
+
+  * Save userId in AsyncStorage ("active_user_id")
+  * Update auth state
+  * Close menu
+  * Refresh UI
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. LOGOUT ACTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* On logout:
+
+  * Remove "active_user_id" from AsyncStorage
+  * Update auth state
+  * Navigate to Home
+  * Refresh UI
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. QUIZ ACCESS CONTROL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* On Quiz click:
+
+IF not logged in:
+→ go to Login
+
+IF logged in:
+→ go to QuizListScreen
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+7. UI STATE CHANGE (IMPORTANT)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* Login button (green) → when logged OUT
+
+* Logout button (red) → when logged IN
+
+* Must re-render UI after login/logout
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+8. DEBUG FIXES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* Ensure useEffect reloads auth state on app start
+* Ensure state updates trigger re-render
+* Use useFocusEffect if needed for navigation refresh
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GOAL:
+
+* Dynamic login/logout button
+* Proper quiz access control
+* Clean user experience

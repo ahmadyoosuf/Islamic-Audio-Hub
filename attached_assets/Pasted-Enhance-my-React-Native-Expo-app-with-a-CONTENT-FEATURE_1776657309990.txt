@@ -1,0 +1,113 @@
+Enhance my React Native Expo app with a CONTENT FEATURE TOGGLE SYSTEM for each card.
+
+IMPORTANT:
+
+* Do NOT break existing audio/quiz system
+* Extend current card structure
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. DATA STRUCTURE UPDATE (Firestore)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Each card document should include:
+
+{
+title_ta: string,
+title_en: string,
+
+features: {
+audio: boolean,
+video: boolean,
+slides: boolean,
+text: boolean,
+quiz: boolean
+},
+
+content: {
+audioUrl: string,
+videoUrl: string,
+slides: array,
+text: string,
+quiz: array
+}
+}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. FRONTEND DISPLAY LOGIC
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For each card:
+
+Loop through 5 features:
+
+* audio
+* video
+* slides
+* text
+* quiz
+
+RULES:
+
+1. IF feature = false:
+   → Do NOT show icon
+
+2. IF feature = true AND data exists:
+   → Show icon normally
+   → Enable click
+
+3. IF feature = true BUT data missing:
+   → Show icon in dim mode (opacity 0.4)
+   → Disable click
+   → Optional tooltip: "இது கிடைக்கவில்லை"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. UI IMPLEMENTATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* Create icon row under each card
+
+* Use icons:
+  🎧 Audio
+  🎥 Video
+  🖼️ Slides
+  📖 Text
+  🧠 Quiz
+
+* Apply styles:
+  enabled → opacity 1
+  disabled → opacity 0.4
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+4. CLICK ACTIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* Audio → open audio player
+* Video → open video screen
+* Slides → open slides viewer
+* Text → open reading screen
+* Quiz → open QuizModal
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5. ADMIN PANEL SUPPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* Add toggle switches for each feature
+* Allow admin to:
+
+  * enable/disable feature
+  * add/remove content
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6. FALLBACK SAFETY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* Prevent crash if content missing
+* Always check data before rendering
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GOAL:
+
+* Provide flexible content control
+* Improve UI clarity for users
+* Allow admin to manage content dynamically

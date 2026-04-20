@@ -1,0 +1,99 @@
+Enhance my React Native Expo app with AUTO LOGIN, SESSION RESTORE, MULTI-ACCOUNT (2 max per device), and LOGOUT/SWITCH ACCOUNT system.
+
+IMPORTANT:
+
+* Do NOT break existing quiz system
+* Extend authentication and session logic cleanly
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1: AUTO LOGIN + SESSION RESTORE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. On app start:
+
+   * Check AsyncStorage key: "active_user_id"
+
+2. IF exists:
+   → Auto login
+   → Load user data from Firestore:
+   users/{userId}
+
+   * coins
+   * progress
+   * badges
+
+3. IF not exists:
+   → Navigate to Login screen
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2: MULTI-ACCOUNT SYSTEM (MAX 2 PER DEVICE)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Store accounts locally:
+   AsyncStorage key: "device_accounts_v1"
+   value: array of userIds
+
+2. On login:
+
+   * IF userId not in device_accounts:
+     IF length < 2:
+     → add userId
+     ELSE:
+     → show error:
+     "இந்த சாதனத்தில் 2 கணக்குகள் மட்டுமே பயன்படுத்த முடியும்"
+
+3. Always maintain:
+   active_user_id
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 3: SWITCH ACCOUNT FEATURE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Create Account Switch UI (Profile screen):
+
+   * List all device accounts
+   * Show userId
+
+2. On select:
+
+   * Set selected userId as "active_user_id"
+   * Reload app state
+
+3. Add "Add Account" button:
+   → Navigate to Login (respect 2-account limit)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 4: LOGOUT SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Add Logout button
+
+2. On logout:
+
+   * Remove "active_user_id" from AsyncStorage
+   * Do NOT delete device_accounts list
+
+3. After logout:
+   → Navigate to Login screen
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 5: SECURITY RULE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* All quiz access requires active_user_id
+* If missing → force login
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 6: OPTIONAL UX IMPROVEMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* Show current active user in header
+* Show "Switch Account" button
+* Confirmation dialog for logout
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GOAL:
+
+* Enable smooth multi-user experience on same device
+* Avoid repeated login
+* Allow safe account switching

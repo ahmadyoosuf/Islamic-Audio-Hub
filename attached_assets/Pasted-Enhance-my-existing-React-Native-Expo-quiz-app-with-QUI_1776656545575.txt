@@ -1,0 +1,92 @@
+Enhance my existing React Native Expo quiz app with QUIZ LIST navigation and LOGOUT functionality.
+
+IMPORTANT:
+
+* Do NOT break existing quiz system
+* Extend current architecture cleanly
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 1: QUIZ ICON + QUIZ LIST SCREEN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Add a "Quiz" icon in the top header (next to score/profile)
+
+2. On press:
+   IF user is NOT logged in:
+   → Navigate to Login screen
+   ELSE:
+   → Navigate to QuizListScreen
+
+3. Create QuizListScreen:
+
+   * Fetch all cards from Firestore (cards collection)
+   * Only include cards with quiz questions
+
+4. Fetch user progress:
+   users/{userId}/progress
+
+5. Determine:
+   played = true if any level completed
+
+6. Sorting logic:
+
+   IF new user:
+   → show all quizzes (createdAt ASC)
+
+   IF existing user:
+   → split into:
+   - Unplayed quizzes (played = false)
+   - Played quizzes (played = true)
+
+   → final list:
+   [Unplayed first] + [Played after]
+
+7. UI:
+
+   * Show title
+   * Show "புதியது" for unplayed
+   * Show "முடிந்தது" for played
+   * Optional: show stars ⭐
+
+8. On click:
+   → open existing QuizModal
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PART 2: LOGOUT SYSTEM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Add Logout button in Profile screen or Settings
+
+2. On Logout:
+
+   * Remove userId from AsyncStorage:
+     key: "user_id_v1"
+   * Clear any cached user session data
+
+3. After logout:
+
+   * Navigate to Login screen
+   * Prevent access to QuizList and QuizModal
+
+4. App startup behavior:
+
+   * If no userId found:
+     → force Login screen
+
+5. Optional:
+
+   * Show confirmation dialog:
+     "நீங்கள் Logout செய்ய விரும்புகிறீர்களா?"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SECURITY RULE:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+* All quiz and profile access requires userId
+* If userId missing → redirect to Login
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+GOAL:
+
+* Add proper user session control
+* Improve navigation and user experience

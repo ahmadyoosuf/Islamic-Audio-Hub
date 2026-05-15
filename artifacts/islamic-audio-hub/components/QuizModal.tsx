@@ -51,6 +51,12 @@ const VOICE_MODE_KEY  = "quiz_voice_mode_v1";
 const QUESTION_TIMER  = 15;   // seconds per question
 const OPTION_LABELS   = ["A", "B", "C", "D"];
 
+// Distinct per-option colors (A: red, B: amber, C: blue, D: green) — applied as
+// the box accent while the question is unanswered. Answer feedback (green for
+// correct / red for the wrong pick) still overrides these on selection.
+const OPTION_COLORS   = ["#ef4444", "#f59e0b", "#3b82f6", "#22c55e"];
+const MAX_OPTIONS     = 4;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Phase = "select" | "playing" | "result" | "review";
@@ -313,16 +319,36 @@ export default function QuizModal({
   // ── Animations ────────────────────────────────────────────────────────────
   const fadeQ     = useRef(new Animated.Value(0)).current;
   const slideQ    = useRef(new Animated.Value(28)).current;
-  const scaleOpts = useRef(new Animated.Value(0.94)).current;
+  // Per-option entry progress (0→1) and a press/selection bounce scale (≈1).
+  const optEntry  = useRef(Array.from({ length: MAX_OPTIONS }, () => new Animated.Value(0))).current;
+  const optPress  = useRef(Array.from({ length: MAX_OPTIONS }, () => new Animated.Value(1))).current;
 
   const animateIn = useCallback(() => {
-    fadeQ.setValue(0); slideQ.setValue(28); scaleOpts.setValue(0.93);
+    fadeQ.setValue(0); slideQ.setValue(28);
+    optEntry.forEach(v => v.setValue(0));
+    optPress.forEach(v => v.setValue(1));
     Animated.parallel([
-      Animated.timing(fadeQ,     { toValue: 1, duration: 260, useNativeDriver: true }),
-      Animated.spring(slideQ,    { toValue: 0, useNativeDriver: true, tension: 90, friction: 9 }),
-      Animated.spring(scaleOpts, { toValue: 1, useNativeDriver: true, tension: 100, friction: 8 }),
+      Animated.timing(fadeQ,  { toValue: 1, duration: 260, useNativeDriver: true }),
+      Animated.spring(slideQ, { toValue: 0, useNativeDriver: true, tension: 90, friction: 9 }),
+      // Staggered bounce-in for each option box
+      Animated.stagger(
+        70,
+        optEntry.map(v =>
+          Animated.spring(v, { toValue: 1, useNativeDriver: true, tension: 120, friction: 7 }),
+        ),
+      ),
     ]).start();
-  }, [fadeQ, slideQ, scaleOpts]);
+  }, [fadeQ, slideQ, optEntry, optPress]);
+
+  // Quick scale pop when an option is tapped (selection state change).
+  const bounceOption = useCallback((i: number) => {
+    const v = optPress[i];
+    if (!v) return;
+    Animated.sequence([
+      Animated.timing(v, { toValue: 1.07, duration: 110, useNativeDriver: true }),
+      Animated.spring(v,  { toValue: 1, useNativeDriver: true, tension: 140, friction: 6 }),
+    ]).start();
+  }, [optPress]);
 
   useEffect(() => {
     if (phase === "playing") animateIn();
@@ -431,6 +457,7 @@ export default function QuizModal({
     if (answered) return;
     if (timerRef.current) clearInterval(timerRef.current);
     stopSpeech();
+    bounceOption(optIdx);
     setSelected(optIdx);
     setAnswered(true);
 
@@ -796,55 +823,73 @@ export default function QuizModal({
               </Animated.View>
 
               {/* Options */}
-              <Animated.View style={{ transform: [{ scale: scaleOpts }] }}>
+              <View>
                 {q.options.map((opt, i) => {
                   const isSel  = selected === i;
                   const isCorr = q.correctIndex === i;
-                  const isTimeout = answered && selected === null;
+                  const color  = OPTION_COLORS[i % OPTION_COLORS.length];
 
-                  let optBg     = card;
-                  let optBorder = border;
+                  // Unanswered → distinct per-option color accent
+                  let optBg     = color + (isDarkMode ? "26" : "1A");
+                  let optBorder = color;
                   let optTxtCol = txt;
+                  let labelBg   = color;
+                  let labelTxt  = "#ffffff";
 
                   if (answered) {
                     if (isCorr) {
                       optBg = "#4ade8030"; optBorder = "#4ade80";
                       optTxtCol = isDarkMode ? "#4ade80" : "#166534";
+                      labelBg = "#4ade80"; labelTxt = "#fff";
                     } else if (isSel) {
                       optBg = "#f8717150"; optBorder = "#ef4444";
                       optTxtCol = isDarkMode ? "#f87171" : "#7f1d1d";
+                      labelBg = "#ef4444"; labelTxt = "#fff";
+                    } else {
+                      // Dim the untouched options once answered
+                      optBg = card; optBorder = border;
+                      labelBg = isDarkMode ? "#2a2a2a" : "#f0f0f0";
+                      labelTxt = sub;
                     }
                   }
 
-                  const labelBg = answered && isCorr
-                    ? "#4ade80"
-                    : answered && isSel && !isCorr
-                    ? "#ef4444"
-                    : isDarkMode ? "#2a2a2a" : "#f0f0f0";
+                  const entry = optEntry[i] ?? new Animated.Value(1);
+                  const press = optPress[i] ?? new Animated.Value(1);
+                  const animStyle = {
+                    opacity: entry,
+                    transform: [
+                      { translateY: entry.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) },
+                      { scale: Animated.multiply(
+                          entry.interpolate({ inputRange: [0, 1], outputRange: [0.9, 1] }),
+                          press,
+                        ) },
+                    ],
+                  };
 
                   return (
-                    <Pressable
-                      key={i}
-                      style={({ pressed }) => [
-                        s.optBtn,
-                        { backgroundColor: optBg, borderColor: optBorder,
-                          opacity: answered && !isSel && !isCorr ? 0.45 : pressed ? 0.78 : 1 },
-                      ]}
-                      onPress={() => handleSelect(i)}
-                      disabled={answered}
-                    >
-                      <View style={[s.optLabelBox, { backgroundColor: labelBg }]}>
-                        <Text style={[s.optLabelTxt, { color: answered && (isCorr || (isSel && !isCorr)) ? "#fff" : sub }]}>
-                          {OPTION_LABELS[i] ?? String(i + 1)}
-                        </Text>
-                      </View>
-                      <Text style={[s.optTxt, { color: optTxtCol, flex: 1 }]}>{opt}</Text>
-                      {answered && isCorr  && <Ionicons name="checkmark-circle" size={22} color="#4ade80" />}
-                      {answered && isSel && !isCorr && <Ionicons name="close-circle" size={22} color="#ef4444" />}
-                    </Pressable>
+                    <Animated.View key={i} style={animStyle}>
+                      <Pressable
+                        style={({ pressed }) => [
+                          s.optBtn,
+                          { backgroundColor: optBg, borderColor: optBorder,
+                            opacity: answered && !isSel && !isCorr ? 0.45 : pressed ? 0.85 : 1 },
+                        ]}
+                        onPress={() => handleSelect(i)}
+                        disabled={answered}
+                      >
+                        <View style={[s.optLabelBox, { backgroundColor: labelBg }]}>
+                          <Text style={[s.optLabelTxt, { color: labelTxt }]}>
+                            {OPTION_LABELS[i] ?? String(i + 1)}
+                          </Text>
+                        </View>
+                        <Text style={[s.optTxt, { color: optTxtCol, flex: 1 }]}>{opt}</Text>
+                        {answered && isCorr  && <Ionicons name="checkmark-circle" size={22} color="#4ade80" />}
+                        {answered && isSel && !isCorr && <Ionicons name="close-circle" size={22} color="#ef4444" />}
+                      </Pressable>
+                    </Animated.View>
                   );
                 })}
-              </Animated.View>
+              </View>
 
               {/* Timeout message */}
               {answered && selected === null && (

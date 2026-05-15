@@ -1,7 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Video, ResizeMode } from "expo-av";
 import * as Haptics from "expo-haptics";
+import * as WebBrowser from "expo-web-browser";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -19,16 +21,18 @@ import QuizModal from "@/components/QuizModal";
 import { useAudio } from "@/context/AudioContext";
 import { useApp } from "@/context/AppContext";
 import { getCardById, type FBCard } from "@/services/firebase.firestore";
+import { slideKindFromUrl } from "@/services/firebase.storage";
 import type { Track } from "@/context/AppContext";
 
 // ─── Tab definition ───────────────────────────────────────────────────────────
-type TabKey = "explanation" | "podcast" | "quiz" | "read" | "slide";
+type TabKey = "explanation" | "video" | "podcast" | "quiz" | "read" | "slide";
 const TABS: { key: TabKey; icon: string; label: string }[] = [
-  { key: "explanation", icon: "volume-high",       label: "விளக்கம்" },
-  { key: "podcast",     icon: "mic",               label: "Podcast"  },
-  { key: "quiz",        icon: "help-circle",       label: "Quiz"     },
-  { key: "read",        icon: "book-outline",      label: "படிக்க"   },
-  { key: "slide",       icon: "image-outline",     label: "Slide"    },
+  { key: "explanation", icon: "volume-high",       label: "ஒலி"     },
+  { key: "video",       icon: "videocam",          label: "Video"   },
+  { key: "podcast",     icon: "mic",               label: "Podcast" },
+  { key: "quiz",        icon: "help-circle",       label: "Quiz"    },
+  { key: "read",        icon: "book-outline",      label: "படிக்க"  },
+  { key: "slide",       icon: "easel-outline",     label: "Slide"   },
 ];
 
 // ─── FBCard → Track adapter ───────────────────────────────────────────────────
@@ -100,6 +104,68 @@ function AudioTab({ url, label, card, isDark }: { url: string; label: string; ca
   );
 }
 
+// ─── Video Tab ────────────────────────────────────────────────────────────────
+// Handles BOTH direct uploaded files (Firebase Storage URL) and external direct
+// video URLs (.mp4 etc.) through the same expo-av <Video> source. Page links
+// that the native player can't decode (YouTube/Vimeo watch pages) fall back to
+// an "open externally" button so the content is never lost.
+
+function isEmbedOnlyUrl(url: string): boolean {
+  const u = url.toLowerCase();
+  if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/.test(u)) return true;
+  if (/vimeo\.com\/\d+/.test(u) && !/\.(mp4|m3u8|webm)/.test(u)) return true;
+  return false;
+}
+
+function VideoTab({ url, isDark }: { url: string; isDark: boolean }) {
+  const videoRef = useRef<Video>(null);
+  const [status, setStatus] = useState<{ error?: boolean }>({});
+
+  if (!url) {
+    return (
+      <View style={styles.emptyTab}>
+        <Ionicons name="videocam-outline" size={48} color="#888" />
+        <Text style={[styles.emptyTabTxt, { color: isDark ? "#888" : "#aaa" }]}>
+          வீடியோ இன்னும் சேர்க்கப்படவில்லை
+        </Text>
+      </View>
+    );
+  }
+
+  if (isEmbedOnlyUrl(url) || status.error) {
+    return (
+      <View style={styles.emptyTab}>
+        <Ionicons name="logo-youtube" size={48} color="#ef4444" />
+        <Text style={[styles.emptyTabTxt, { color: isDark ? "#aaa" : "#5a7a64" }]}>
+          இந்த வீடியோ வெளிப்புற இணைப்பில் உள்ளது
+        </Text>
+        <Pressable
+          onPress={() => WebBrowser.openBrowserAsync(url)}
+          style={[styles.playBtn, { backgroundColor: "#ef4444" }]}
+        >
+          <Ionicons name="open-outline" size={22} color="#fff" />
+          <Text style={styles.playBtnTxt}>வீடியோவைத் திற</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.videoCont} showsVerticalScrollIndicator={false}>
+      <View style={styles.videoFrame}>
+        <Video
+          ref={videoRef}
+          source={{ uri: url }}
+          style={styles.videoPlayer}
+          useNativeControls
+          resizeMode={ResizeMode.CONTAIN}
+          onError={() => setStatus({ error: true })}
+        />
+      </View>
+    </ScrollView>
+  );
+}
+
 // ─── Read Tab ─────────────────────────────────────────────────────────────────
 function ReadTab({ content, isDark }: { content: string; isDark: boolean }) {
   if (!content) {
@@ -123,26 +189,67 @@ function ReadTab({ content, isDark }: { content: string; isDark: boolean }) {
 }
 
 // ─── Slide Tab ────────────────────────────────────────────────────────────────
-function SlideTab({ url, isDark }: { url: string; isDark: boolean }) {
-  if (!url) {
+// Supports three slide formats:
+//   • image  → rendered inline with <Image>
+//   • pdf    → opened in the system browser (renders natively everywhere)
+//   • ppt    → wrapped through the Office Online viewer so .ppt/.pptx render
+// The doc viewer is dependency-free (no WebView) and works on web + native.
+
+function officeViewerUrl(docUrl: string): string {
+  return "https://view.officeapps.live.com/op/view.aspx?src=" + encodeURIComponent(docUrl);
+}
+
+function DocSlide({ docUrl, isDark }: { docUrl: string; isDark: boolean }) {
+  const kind = slideKindFromUrl(docUrl);
+  const isPpt = kind === "ppt";
+  const open = () =>
+    WebBrowser.openBrowserAsync(isPpt ? officeViewerUrl(docUrl) : docUrl);
+
+  return (
+    <View style={styles.emptyTab}>
+      <View style={[styles.docBadge, { backgroundColor: isPpt ? "#d2440022" : "#b3000022" }]}>
+        <Ionicons
+          name={isPpt ? "easel" : "document-text"}
+          size={56}
+          color={isPpt ? "#d24400" : "#b30000"}
+        />
+      </View>
+      <Text style={[styles.docTitle, { color: isDark ? "#fff" : "#0d2414" }]}>
+        {isPpt ? "PowerPoint வழங்கல்" : "PDF ஆவணம்"}
+      </Text>
+      <Text style={[styles.emptyTabTxt, { color: isDark ? "#888" : "#5a7a64" }]}>
+        {(() => { try { return decodeURIComponent(docUrl.split("/").pop()?.split("?")[0] ?? ""); } catch { return ""; } })()}
+      </Text>
+      <Pressable onPress={open} style={[styles.playBtn, { backgroundColor: "#1a7a4a" }]}>
+        <Ionicons name="open-outline" size={22} color="#fff" />
+        <Text style={styles.playBtnTxt}>ஆவணத்தைத் திற</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function SlideTab({ imageUrl, docUrl, isDark }: { imageUrl: string; docUrl: string; isDark: boolean }) {
+  if (!imageUrl && !docUrl) {
     return (
       <View style={styles.emptyTab}>
-        <Ionicons name="image-outline" size={48} color="#888" />
+        <Ionicons name="easel-outline" size={48} color="#888" />
         <Text style={[styles.emptyTabTxt, { color: isDark ? "#888" : "#aaa" }]}>
-          Slide படம் இன்னும் சேர்க்கப்படவில்லை
+          Slide இன்னும் சேர்க்கப்படவில்லை
         </Text>
       </View>
     );
   }
-  return (
-    <ScrollView contentContainerStyle={styles.slideCont} showsVerticalScrollIndicator={false}>
-      <Image
-        source={{ uri: url }}
-        style={styles.slideImage}
-        resizeMode="contain"
-      />
-    </ScrollView>
-  );
+
+  if (imageUrl && slideKindFromUrl(imageUrl) !== "pdf" && slideKindFromUrl(imageUrl) !== "ppt") {
+    return (
+      <ScrollView contentContainerStyle={styles.slideCont} showsVerticalScrollIndicator={false}>
+        <Image source={{ uri: imageUrl }} style={styles.slideImage} resizeMode="contain" />
+      </ScrollView>
+    );
+  }
+
+  // Document slide (pdf / ppt) — from slideDocUrl, or a doc pasted into the image field
+  return <DocSlide docUrl={docUrl || imageUrl} isDark={isDark} />;
 }
 
 // ─── Quiz Tab ─────────────────────────────────────────────────────────────────
@@ -216,7 +323,6 @@ export default function AudioDetailScreen() {
   }, [id]);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
-  const botPad = Platform.OS === "web" ? 34 + 84 : insets.bottom + 60;
 
   if (loading) {
     return (
@@ -273,33 +379,13 @@ export default function AudioDetailScreen() {
         </Pressable>
       </View>
 
-      {/* ── Tab bar ── */}
-      <View style={[styles.tabBar, { backgroundColor: isDark ? "#111" : "#fff", borderBottomColor: isDark ? "#222" : "#d4ead9" }]}>
-        {TABS.map(tab => {
-          const active = activeTab === tab.key;
-          return (
-            <Pressable
-              key={tab.key}
-              onPress={() => setActiveTab(tab.key)}
-              style={[styles.tabItem, active && { borderBottomColor: "#1a7a4a", borderBottomWidth: 2 }]}
-            >
-              <Ionicons
-                name={tab.icon as any}
-                size={18}
-                color={active ? "#1a7a4a" : sub}
-              />
-              <Text style={[styles.tabLabel, { color: active ? "#1a7a4a" : sub, fontWeight: active ? "700" : "500" }]}>
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* ── Tab content ── */}
-      <View style={{ flex: 1, paddingBottom: botPad }}>
+      {/* ── Tab content (fills the full vertical space; Read text starts at top) ── */}
+      <View style={{ flex: 1 }}>
         {activeTab === "explanation" && (
           <AudioTab url={card.audioUrl} label="விளக்கம்" card={card} isDark={isDark} />
+        )}
+        {activeTab === "video" && (
+          <VideoTab url={card.videoUrl ?? ""} isDark={isDark} />
         )}
         {activeTab === "podcast" && (
           <AudioTab url={card.podcastAudioUrl ?? ""} label="Podcast" card={{ ...card, audioUrl: card.podcastAudioUrl ?? "" }} isDark={isDark} />
@@ -311,13 +397,43 @@ export default function AudioDetailScreen() {
           <ReadTab content={card.readContent ?? ""} isDark={isDark} />
         )}
         {activeTab === "slide" && (
-          <SlideTab url={card.slideImageUrl ?? ""} isDark={isDark} />
+          <SlideTab imageUrl={card.slideImageUrl ?? ""} docUrl={card.slideDocUrl ?? ""} isDark={isDark} />
         )}
       </View>
 
-      {/* ── Global mini player ── */}
-      <View style={[styles.playerBar, { bottom: botPad - (Platform.OS === "web" ? 84 : 60) }]}>
-        <AudioPlayer />
+      {/* ── Global mini player (sits directly above the bottom nav) ── */}
+      <AudioPlayer />
+
+      {/* ── Bottom navigation menu (relocated to the absolute bottom) ── */}
+      <View
+        style={[
+          styles.tabBar,
+          {
+            backgroundColor: isDark ? "#111" : "#fff",
+            borderTopColor: isDark ? "#222" : "#d4ead9",
+            paddingBottom: Platform.OS === "web" ? 12 : insets.bottom + 6,
+          },
+        ]}
+      >
+        {TABS.map(tab => {
+          const active = activeTab === tab.key;
+          return (
+            <Pressable
+              key={tab.key}
+              onPress={() => setActiveTab(tab.key)}
+              style={[styles.tabItem, active && { borderTopColor: "#1a7a4a", borderTopWidth: 2 }]}
+            >
+              <Ionicons
+                name={tab.icon as any}
+                size={20}
+                color={active ? "#1a7a4a" : sub}
+              />
+              <Text style={[styles.tabLabel, { color: active ? "#1a7a4a" : sub, fontWeight: active ? "700" : "500" }]}>
+                {tab.label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
@@ -338,16 +454,24 @@ const styles = StyleSheet.create({
 
   tabBar: {
     flexDirection: "row",
-    borderBottomWidth: 1,
+    borderTopWidth: 1,
     paddingHorizontal: 4,
+    paddingTop: 6,
   },
   tabItem: {
     flex: 1, alignItems: "center", justifyContent: "center", gap: 3,
-    paddingVertical: 10, borderBottomWidth: 2, borderBottomColor: "transparent",
+    paddingVertical: 8, borderTopWidth: 2, borderTopColor: "transparent",
   },
   tabLabel: { fontSize: 10 },
 
-  playerBar: { position: "absolute", left: 0, right: 0 },
+  // Video tab
+  videoCont:   { flexGrow: 1, justifyContent: "center", padding: 16 },
+  videoFrame:  { width: "100%", aspectRatio: 16 / 9, borderRadius: 12, overflow: "hidden", backgroundColor: "#000" },
+  videoPlayer: { width: "100%", height: "100%" },
+
+  // Doc slide
+  docBadge: { width: 110, height: 110, borderRadius: 28, alignItems: "center", justifyContent: "center", marginBottom: 4 },
+  docTitle: { fontSize: 19, fontWeight: "800", textAlign: "center" },
 
   // Audio tab
   audioTab: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, gap: 16 },
@@ -366,8 +490,8 @@ const styles = StyleSheet.create({
   quizTabTitle: { fontSize: 20, fontWeight: "800", textAlign: "center" },
   quizTabSub:   { fontSize: 14, textAlign: "center" },
 
-  // Read tab
-  readScroll:  { flex: 1, paddingHorizontal: 20, paddingTop: 16 },
+  // Read tab — text begins at the very top of the content area
+  readScroll:  { flex: 1, paddingHorizontal: 20, paddingTop: 4 },
   readContent: { fontSize: 16, lineHeight: 30 },
 
   // Slide tab

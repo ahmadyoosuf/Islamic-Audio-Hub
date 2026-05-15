@@ -54,8 +54,10 @@ export interface FBCard {
   titleEn:             string;
   audioUrl:            string;
   podcastAudioUrl:     string;
+  videoUrl:            string;   // file upload OR external URL (.mp4 etc.)
   readContent:         string;
   slideImageUrl:       string;
+  slideDocUrl:         string;   // PDF / PPT / PPTX document URL
   duration:            number;
   description:         string;
   isPremium:           boolean;
@@ -114,8 +116,10 @@ function toFBCard(id: string, data: Record<string, any>): FBCard {
     titleEn:         data.titleEn         ?? "",
     audioUrl:        data.audioUrl        ?? "",
     podcastAudioUrl: data.podcastAudioUrl ?? "",
+    videoUrl:        data.videoUrl        ?? "",
     readContent:     data.readContent     ?? "",
     slideImageUrl:   data.slideImageUrl   ?? "",
+    slideDocUrl:     data.slideDocUrl     ?? "",
     duration:        data.duration        ?? 0,
     description:     data.description     ?? "",
     isPremium:       data.isPremium       ?? false,

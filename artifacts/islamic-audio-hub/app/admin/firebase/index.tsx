@@ -24,7 +24,11 @@ import {
   type FBSubcategory,
   type FBCard,
 } from "@/services/firebase.firestore";
-import { uploadAudio, uploadImage, pickAudioFileWeb, pickImageFileWeb, type UploadProgress } from "@/services/firebase.storage";
+import {
+  uploadAudio, uploadImage, uploadVideo, uploadDoc,
+  pickAudioFileWeb, pickImageFileWeb, pickVideoFileWeb, pickDocFileWeb,
+  type UploadProgress,
+} from "@/services/firebase.storage";
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const C = {
@@ -446,7 +450,7 @@ function CardsView({
   const [cards,       setCards]       = useState<FBCard[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [saving,      setSaving]      = useState(false);
-  const [uploading,      setUploading]      = useState<"" | "audio" | "podcast" | "slide">("");
+  const [uploading,      setUploading]      = useState<"" | "audio" | "podcast" | "video" | "slide" | "slidedoc">("");
   const [uploadPhase,    setUploadPhase]    = useState<"reading" | "uploading">("reading");
   const [uploadPercent,  setUploadPercent]  = useState(0);
   const [showTypeModal, setShowTypeModal] = useState(false);
@@ -462,9 +466,10 @@ function CardsView({
 
   const [form, setForm] = useState<{
     titleTa: string; titleEn: string; description: string;
-    audioUrl: string; podcastAudioUrl: string; readContent: string; slideImageUrl: string;
+    audioUrl: string; podcastAudioUrl: string; videoUrl: string;
+    readContent: string; slideImageUrl: string; slideDocUrl: string;
     quiz: import("@/services/firebase.firestore").FBQuizQuestion[];
-  }>({ titleTa: "", titleEn: "", description: "", audioUrl: "", podcastAudioUrl: "", readContent: "", slideImageUrl: "", quiz: [] });
+  }>({ titleTa: "", titleEn: "", description: "", audioUrl: "", podcastAudioUrl: "", videoUrl: "", readContent: "", slideImageUrl: "", slideDocUrl: "", quiz: [] });
 
   // ── Strict Firestore query: only cards where subcategoryId == sub.id ─────
   const load = useCallback(async () => {
@@ -478,7 +483,7 @@ function CardsView({
   function cancelForm() {
     setShowForm(false);
     setEditId(null);
-    setForm({ titleTa: "", titleEn: "", description: "", audioUrl: "", podcastAudioUrl: "", readContent: "", slideImageUrl: "", quiz: [] });
+    setForm({ titleTa: "", titleEn: "", description: "", audioUrl: "", podcastAudioUrl: "", videoUrl: "", readContent: "", slideImageUrl: "", slideDocUrl: "", quiz: [] });
     setInputMode("manual");
     setPasteText(""); setPasteError(""); setParsedOk(false); setShowFormat(false);
   }
@@ -490,7 +495,9 @@ function CardsView({
     setForm({
       titleTa: card.titleTa, titleEn: card.titleEn, description: card.description,
       audioUrl: card.audioUrl, podcastAudioUrl: card.podcastAudioUrl ?? "",
+      videoUrl: card.videoUrl ?? "",
       readContent: card.readContent ?? "", slideImageUrl: card.slideImageUrl ?? "",
+      slideDocUrl: card.slideDocUrl ?? "",
       quiz: card.quiz ?? [],
     });
     setInputMode("manual");
@@ -565,6 +572,65 @@ function CardsView({
     finally { setUploading(""); setUploadPhase("reading"); }
   }
 
+  async function pickAndUploadVideo() {
+    try {
+      let source: string | File;
+      let name: string;
+      if (Platform.OS === "web") {
+        const file = await pickVideoFileWeb();
+        if (!file) return;
+        if (file.size === 0) { Alert.alert("பிழை", `"${file.name}" வீடியோ காலியாக உள்ளது`); return; }
+        source = file; name = file.name;
+      } else {
+        const result = await DocumentPicker.getDocumentAsync({ type: "video/*", copyToCacheDirectory: true });
+        if (result.canceled || !result.assets?.[0]) return;
+        const asset = result.assets[0];
+        source = asset.uri; name = asset.name ?? "video.mp4";
+      }
+      setUploading("video"); setUploadPhase("reading"); setUploadPercent(0);
+      const url = await uploadVideo(source, `${Date.now()}_${name}`, (p: UploadProgress) => {
+        if (p.percent > 0) setUploadPhase("uploading");
+        setUploadPercent(p.percent);
+      });
+      setForm(f => ({ ...f, videoUrl: url }));
+      Alert.alert("✅ வீடியோ வெற்றி", `"${name}" Firebase Storage-ல் சேமிக்கப்பட்டது`);
+    } catch (e: any) { Alert.alert("பிழை", e.message ?? "வீடியோ பதிவேற்றம் தோல்வி"); }
+    finally { setUploading(""); setUploadPhase("reading"); }
+  }
+
+  async function pickAndUploadDoc() {
+    try {
+      let source: string | File;
+      let name: string;
+      if (Platform.OS === "web") {
+        const file = await pickDocFileWeb();
+        if (!file) return;
+        if (file.size === 0) { Alert.alert("பிழை", `"${file.name}" ஆவணம் காலியாக உள்ளது`); return; }
+        source = file; name = file.name;
+      } else {
+        const result = await DocumentPicker.getDocumentAsync({
+          type: [
+            "application/pdf",
+            "application/vnd.ms-powerpoint",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+          ],
+          copyToCacheDirectory: true,
+        });
+        if (result.canceled || !result.assets?.[0]) return;
+        const asset = result.assets[0];
+        source = asset.uri; name = asset.name ?? "slide.pdf";
+      }
+      setUploading("slidedoc"); setUploadPhase("reading"); setUploadPercent(0);
+      const url = await uploadDoc(source, `${Date.now()}_${name}`, (p: UploadProgress) => {
+        if (p.percent > 0) setUploadPhase("uploading");
+        setUploadPercent(p.percent);
+      });
+      setForm(f => ({ ...f, slideDocUrl: url }));
+      Alert.alert("✅ ஆவணம் வெற்றி", `"${name}" Firebase Storage-ல் சேமிக்கப்பட்டது`);
+    } catch (e: any) { Alert.alert("பிழை", e.message ?? "ஆவணம் பதிவேற்றம் தோல்வி"); }
+    finally { setUploading(""); setUploadPhase("reading"); }
+  }
+
   async function save() {
     if (!form.titleTa.trim()) { Alert.alert("தவறு", "தமிழ் தலைப்பு கட்டாயம்"); return; }
     if (inputMode === "paste" && !parsedOk) { Alert.alert("தவறு", 'முதலில் "உள்ளடக்கம் ஏற்று" அழுத்தவும்'); return; }
@@ -578,8 +644,10 @@ function CardsView({
         titleEn:         form.titleEn.trim(),
         audioUrl:        form.audioUrl.trim(),
         podcastAudioUrl: form.podcastAudioUrl.trim(),
+        videoUrl:        form.videoUrl.trim(),
         readContent:     form.readContent.trim(),
         slideImageUrl:   form.slideImageUrl.trim(),
+        slideDocUrl:     form.slideDocUrl.trim(),
         description:     form.description.trim(),
         isPremium: false,
         hasQuiz,
@@ -777,12 +845,22 @@ function CardsView({
           />
           <Field label="அல்லது Podcast URL" value={form.podcastAudioUrl} onChangeText={v => setForm(f => ({ ...f, podcastAudioUrl: v }))} placeholder="https://..." />
 
-          {/* ── 3. Read Content ── */}
+          {/* ── 3. Video ── */}
+          <Text style={[s.sectionHeader]}>🎬 வீடியோ (Video)</Text>
+          <UploadRow
+            url={form.videoUrl} label="வீடியோ கோப்பு பதிவேற்று (.mp4)"
+            uploading={uploading === "video"} phase={uploadPhase} percent={uploadPercent}
+            onUpload={pickAndUploadVideo}
+            onClear={() => setForm(f => ({ ...f, videoUrl: "" }))}
+          />
+          <Field label="அல்லது வீடியோ URL" value={form.videoUrl} onChangeText={v => setForm(f => ({ ...f, videoUrl: v }))} placeholder="https://...  (.mp4 / YouTube-alladhu direct link)" />
+
+          {/* ── 4. Read Content ── */}
           <Text style={[s.sectionHeader]}>📖 படிக்கும் உரை (Read Content)</Text>
           <Field label="உரை உள்ளடக்கம்" value={form.readContent} onChangeText={v => setForm(f => ({ ...f, readContent: v }))} multiline placeholder="இங்கே பாடத்தின் உரை எழுதவும்…" />
 
-          {/* ── 4. Slide Image ── */}
-          <Text style={[s.sectionHeader]}>🖼️ Slide படம்</Text>
+          {/* ── 5. Slide (image OR PDF / PPT document) ── */}
+          <Text style={[s.sectionHeader]}>🖼️ Slide — படம் (Image)</Text>
           <UploadRow
             url={form.slideImageUrl} label="படம் பதிவேற்று" isImage
             uploading={uploading === "slide"} phase={uploadPhase} percent={uploadPercent}
@@ -790,6 +868,15 @@ function CardsView({
             onClear={() => setForm(f => ({ ...f, slideImageUrl: "" }))}
           />
           <Field label="அல்லது படம் URL" value={form.slideImageUrl} onChangeText={v => setForm(f => ({ ...f, slideImageUrl: v }))} placeholder="https://..." />
+
+          <Text style={[s.sectionHeader]}>📄 Slide — ஆவணம் (PDF / PPT / PPTX)</Text>
+          <UploadRow
+            url={form.slideDocUrl} label="ஆவணம் பதிவேற்று (.pdf / .ppt / .pptx)" isImage
+            uploading={uploading === "slidedoc"} phase={uploadPhase} percent={uploadPercent}
+            onUpload={pickAndUploadDoc}
+            onClear={() => setForm(f => ({ ...f, slideDocUrl: "" }))}
+          />
+          <Field label="அல்லது ஆவணம் URL" value={form.slideDocUrl} onChangeText={v => setForm(f => ({ ...f, slideDocUrl: v }))} placeholder="https://....pdf / .pptx" />
 
           <View style={s.formBtns}>
             <TouchableOpacity style={[s.btn, s.btnGray]} onPress={cancelForm}>

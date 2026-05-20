@@ -290,6 +290,8 @@ function QuizTab({ card, isDark }: { card: FBCard; isDark: boolean }) {
         onClose={() => setShowQuiz(false)}
         trackId={card.id}
         trackTitle={card.titleTa || card.titleEn}
+        categoryId={card.categoryId}
+        firestoreQuestions={card.quiz}
         prizeEnabled={false}
       />
     </View>

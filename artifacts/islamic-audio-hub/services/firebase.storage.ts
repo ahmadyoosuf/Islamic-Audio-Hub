@@ -41,10 +41,23 @@ export function pickImageFileWeb(): Promise<File | null> {
 }
 
 export function pickAudioFileWeb(): Promise<File | null> {
+  return pickFileWeb("audio/*");
+}
+
+export function pickVideoFileWeb(): Promise<File | null> {
+  return pickFileWeb("video/*");
+}
+
+export function pickDocFileWeb(): Promise<File | null> {
+  return pickFileWeb(".pdf,.ppt,.pptx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation");
+}
+
+// Generic <input type="file"> picker for web — returns the real File (Blob).
+function pickFileWeb(accept: string): Promise<File | null> {
   return new Promise(resolve => {
     const input = document.createElement("input");
     input.type   = "file";
-    input.accept = "audio/*";
+    input.accept = accept;
     input.style.display = "none";
 
     input.onchange = (e: Event) => {
@@ -219,6 +232,89 @@ export async function uploadImage(
   }
 }
 
+// ─── uploadVideo ──────────────────────────────────────────────────────────────
+// Uploads a video file (.mp4 etc.) to Firebase Storage under videos/ folder.
+// External URLs are stored as-is and never reach this function.
+
+export async function uploadVideo(
+  source:      string | File,
+  fileName:    string,
+  onProgress?: (p: UploadProgress) => void,
+): Promise<string> {
+  return uploadToFolder(source, fileName, "videos", guessVideoContentType, onProgress);
+}
+
+// ─── uploadDoc ────────────────────────────────────────────────────────────────
+// Uploads a slide document (PDF / PPT / PPTX) to Firebase Storage under slides/.
+
+export async function uploadDoc(
+  source:      string | File,
+  fileName:    string,
+  onProgress?: (p: UploadProgress) => void,
+): Promise<string> {
+  return uploadToFolder(source, fileName, "slides", guessDocContentType, onProgress);
+}
+
+// ─── Shared resumable upload core ─────────────────────────────────────────────
+
+async function uploadToFolder(
+  source:        string | File,
+  fileName:      string,
+  folder:        string,
+  guessType:     (name: string) => string,
+  onProgress?:   (p: UploadProgress) => void,
+): Promise<string> {
+  try {
+    try { await ensureAdminSignedIn(); } catch {}
+
+    const storageRef: StorageReference = ref(storage, `${folder}/${fileName}`);
+
+    let blob: Blob;
+    if (typeof source === "string") {
+      blob = await new Promise<Blob>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload  = () => {
+          if (xhr.status >= 200 && xhr.status < 400) resolve(xhr.response as Blob);
+          else reject(new Error(`XHR status ${xhr.status} for URI: ${source}`));
+        };
+        xhr.onerror = () => reject(new Error("XHR network error reading local file"));
+        xhr.responseType = "blob";
+        xhr.open("GET", source, true);
+        xhr.send(null);
+      });
+    } else {
+      blob = source;
+    }
+
+    if (blob.size === 0) {
+      throw new Error("தேர்ந்தெடுத்த கோப்பு காலியாக உள்ளது (0 bytes). வேறு கோப்பை முயற்சிக்கவும்.");
+    }
+
+    onProgress?.({ bytesTransferred: 0, totalBytes: blob.size, percent: 0 });
+
+    const contentType = blob.type || guessType(fileName);
+    const url = await new Promise<string>((resolve, reject) => {
+      const task = uploadBytesResumable(storageRef, blob, { contentType });
+      task.on(
+        "state_changed",
+        snap => {
+          const percent = snap.totalBytes > 0
+            ? Math.round((snap.bytesTransferred / snap.totalBytes) * 100)
+            : 0;
+          onProgress?.({ bytesTransferred: snap.bytesTransferred, totalBytes: snap.totalBytes, percent });
+        },
+        err => reject(err),
+        async () => {
+          try { resolve(await getDownloadURL(task.snapshot.ref)); } catch (e) { reject(e); }
+        },
+      );
+    });
+    return url;
+  } catch (e: any) {
+    throw new Error(friendlyStorageError(e));
+  }
+}
+
 // ─── deleteAudio ──────────────────────────────────────────────────────────────
 
 export async function deleteAudio(downloadUrl: string): Promise<void> {
@@ -238,6 +334,24 @@ export async function getAudioUrl(path: string): Promise<string> {
   return await getDownloadURL(fileRef);
 }
 
+// ─── Slide-kind detection ─────────────────────────────────────────────────────
+// Firebase download URLs look like
+//   https://firebasestorage.../o/slides%2F1700000000_deck.pptx?alt=media&token=...
+// so we decode and strip query before sniffing the extension.
+
+export type SlideKind = "pdf" | "ppt" | "image" | "unknown";
+
+export function slideKindFromUrl(url: string): SlideKind {
+  if (!url) return "unknown";
+  let path = url;
+  try { path = decodeURIComponent(url); } catch {}
+  path = path.split("?")[0].toLowerCase();
+  if (/\.pdf$/.test(path))            return "pdf";
+  if (/\.(pptx?|key)$/.test(path))    return "ppt";
+  if (/\.(png|jpe?g|gif|webp|bmp|heic)$/.test(path)) return "image";
+  return "unknown";
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function guessContentType(filename: string): string {
@@ -253,6 +367,30 @@ function guessContentType(filename: string): string {
     webm: "audio/webm",
   };
   return map[ext ?? ""] ?? "audio/mpeg";
+}
+
+function guessVideoContentType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const map: Record<string, string> = {
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    m4v: "video/x-m4v",
+    webm: "video/webm",
+    mkv: "video/x-matroska",
+    avi: "video/x-msvideo",
+    "3gp": "video/3gpp",
+  };
+  return map[ext ?? ""] ?? "video/mp4";
+}
+
+function guessDocContentType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  const map: Record<string, string> = {
+    pdf:  "application/pdf",
+    ppt:  "application/vnd.ms-powerpoint",
+    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  };
+  return map[ext ?? ""] ?? "application/octet-stream";
 }
 
 function friendlyStorageError(e: any): string {

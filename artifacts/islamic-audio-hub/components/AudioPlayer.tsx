@@ -7,6 +7,7 @@ import {
   SkipBack,
   SkipForward,
   LoaderCircle,
+  X,
 } from "lucide-react-native";
 import React, { useEffect, useRef } from "react";
 import {
@@ -156,6 +157,7 @@ function FullPlayer() {
     togglePlay,
     seekTo,
     setPlaybackRate,
+    stop,
     playNext,
     playPrev,
     setIsExpanded,
@@ -196,7 +198,9 @@ function FullPlayer() {
           <Text style={[styles.fullHeaderTitle, { color: colors.mutedForeground }]}>
             இப்போது கேட்கிறீர்கள்
           </Text>
-          <View style={{ width: 40 }} />
+          <Pressable onPress={() => stop()} style={styles.fullClose} hitSlop={8}>
+            <X size={26} color={colors.mutedForeground} strokeWidth={2} />
+          </Pressable>
         </View>
 
         <View style={styles.fullArtwork}>

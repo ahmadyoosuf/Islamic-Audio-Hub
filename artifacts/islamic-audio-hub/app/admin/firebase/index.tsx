@@ -609,11 +609,7 @@ function CardsView({
         source = file; name = file.name;
       } else {
         const result = await DocumentPicker.getDocumentAsync({
-          type: [
-            "application/pdf",
-            "application/vnd.ms-powerpoint",
-            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-          ],
+          type: ["application/pdf"],
           copyToCacheDirectory: true,
         });
         if (result.canceled || !result.assets?.[0]) return;
@@ -859,24 +855,16 @@ function CardsView({
           <Text style={[s.sectionHeader]}>📖 படிக்கும் உரை (Read Content)</Text>
           <Field label="உரை உள்ளடக்கம்" value={form.readContent} onChangeText={v => setForm(f => ({ ...f, readContent: v }))} multiline placeholder="இங்கே பாடத்தின் உரை எழுதவும்…" />
 
-          {/* ── 5. Slide (image OR PDF / PPT document) ── */}
-          <Text style={[s.sectionHeader]}>🖼️ Slide — படம் (Image)</Text>
+          {/* ── 5. Slide (PDF document only) ── */}
+          <Text style={[s.sectionHeader]}>📄 Slide — PDF ஆவணம்</Text>
           <UploadRow
-            url={form.slideImageUrl} label="படம் பதிவேற்று" isImage
-            uploading={uploading === "slide"} phase={uploadPhase} percent={uploadPercent}
-            onUpload={pickAndUploadSlide}
-            onClear={() => setForm(f => ({ ...f, slideImageUrl: "" }))}
-          />
-          <Field label="அல்லது படம் URL" value={form.slideImageUrl} onChangeText={v => setForm(f => ({ ...f, slideImageUrl: v }))} placeholder="https://..." />
-
-          <Text style={[s.sectionHeader]}>📄 Slide — ஆவணம் (PDF / PPT / PPTX)</Text>
-          <UploadRow
-            url={form.slideDocUrl} label="ஆவணம் பதிவேற்று (.pdf / .ppt / .pptx)" isImage
+            url={form.slideDocUrl} label="PDF பதிவேற்று (.pdf)" isImage
             uploading={uploading === "slidedoc"} phase={uploadPhase} percent={uploadPercent}
             onUpload={pickAndUploadDoc}
             onClear={() => setForm(f => ({ ...f, slideDocUrl: "" }))}
           />
-          <Field label="அல்லது ஆவணம் URL" value={form.slideDocUrl} onChangeText={v => setForm(f => ({ ...f, slideDocUrl: v }))} placeholder="https://....pdf / .pptx" />
+          <Field label="அல்லது PDF URL" value={form.slideDocUrl} onChangeText={v => setForm(f => ({ ...f, slideDocUrl: v }))} placeholder="https://....pdf" />
+          <Text style={s.pdfHint}>PowerPoint (.ppt/.pptx) ஆதரிக்கப்படவில்லை — PDF ஆக மாற்றி பதிவேற்றவும்.</Text>
 
           <View style={s.formBtns}>
             <TouchableOpacity style={[s.btn, s.btnGray]} onPress={cancelForm}>
@@ -1064,6 +1052,7 @@ const s = StyleSheet.create({
   quizPillTxt: { fontSize: 10, color: C.green, fontWeight: "700" },
 
   sectionHeader: { fontSize: 13, fontWeight: "800", color: C.green, marginTop: 16, marginBottom: 8, borderLeftWidth: 3, borderLeftColor: C.green, paddingLeft: 8 },
+  pdfHint:       { fontSize: 11, color: C.sub, marginTop: 2, fontStyle: "italic" },
 
   // ── Mode toggle ──
   modeToggle:    { flexDirection: "row", borderRadius: 10, borderWidth: 1, borderColor: C.border, overflow: "hidden", marginBottom: 16 },

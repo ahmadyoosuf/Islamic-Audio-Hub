@@ -2,13 +2,11 @@ import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import React from "react";
 import {
-  Linking,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   View,
-  useColorScheme,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AudioPlayer from "@/components/AudioPlayer";
@@ -16,8 +14,7 @@ import { useColors } from "@/hooks/useColors";
 
 export default function AboutScreen() {
   const colors = useColors();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const isDark = colors.isDark;
   const insets = useSafeAreaInsets();
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
@@ -44,7 +41,7 @@ export default function AboutScreen() {
         >
           <Ionicons name="moon" size={40} color="#c8a84b" />
           <Text style={[styles.appName, { color: "#c8a84b" }]}>
-            Islamic Audio Hub
+            Hilal
           </Text>
           <Text style={[styles.tagline, { color: colors.foreground }]}>
             செவிகள் சிறக்கட்டும்!{"\n"}சிந்தனை மாறட்டும்!
@@ -149,37 +146,10 @@ export default function AboutScreen() {
               islamicaudiohub@gmail.com
             </Text>
           </View>
-          <View
-            style={[styles.divider, { backgroundColor: isDark ? "#2a2a2a" : "#e2e8f0" }]}
-          />
-          <View style={styles.contactRow}>
-            <Ionicons name="globe" size={20} color="#c8a84b" />
-            <Text
-              style={[styles.contactText, { color: "#c8a84b" }]}
-              onPress={() => Linking.openURL("https://iah.lovable.app")}
-            >
-              iah.lovable.app
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.policyLinks}>
-          {[
-            "தனியுரிமை கொள்கை",
-            "பயன்பாட்டு விதிமுறைகள்",
-            "திரும்ப கொடுப்பு கொள்கை",
-          ].map((link) => (
-            <Text
-              key={link}
-              style={[styles.policyLink, { color: colors.mutedForeground }]}
-            >
-              {link}
-            </Text>
-          ))}
         </View>
 
         <Text style={[styles.footer, { color: colors.mutedForeground }]}>
-          Islamic Audio Hub © 2024{"\n"}அல்லாஹ்வின் மீது நம்பிக்கையுடன் உருவாக்கப்பட்டது
+          Hilal © 2026{"\n"}அல்லாஹ்வின் மீது நம்பிக்கையுடன் உருவாக்கப்பட்டது
         </Text>
       </ScrollView>
 

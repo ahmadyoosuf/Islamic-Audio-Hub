@@ -78,43 +78,46 @@ function AudioTab({ url, label, card, isDark }: { url: string; label: string; ca
     );
   }
 
+  const playing = isActive && isPlaying;
   return (
     <View style={styles.audioTab}>
-      <View style={[styles.audioArtwork, { backgroundColor: isDark ? "#1a3a2a" : "#e8f5ee" }]}>
-        <Ionicons name="musical-notes" size={72} color="#1a7a4a" />
-      </View>
-      <Text style={[styles.audioTabTitle, { color: isDark ? "#fff" : "#0d2414" }]}>
-        {card.titleTa || card.titleEn}
-      </Text>
-      {!!card.description && (
-        <Text style={[styles.audioTabDesc, { color: isDark ? "#aaa" : "#5a7a64" }]} numberOfLines={3}>
-          {card.description}
-        </Text>
-      )}
+      {/* Single, clean play/pause control — the title already shows in the top bar */}
       <Pressable
         onPress={handlePlay}
-        style={[styles.playBtn, { backgroundColor: "#1a7a4a" }]}
+        style={[styles.audioPlayCircle, { backgroundColor: playing ? "#1a7a4a" : (isDark ? "#1a3a2a" : "#e8f5ee") }]}
+        accessibilityRole="button"
+        accessibilityLabel={playing ? "Pause" : "Play"}
       >
-        <Ionicons name={isActive && isPlaying ? "pause" : "play"} size={26} color="#fff" />
-        <Text style={styles.playBtnTxt}>
-          {isActive && isPlaying ? "இடைநிறுத்து" : label + " கேளுங்கள்"}
-        </Text>
+        <Ionicons
+          name={playing ? "pause" : "play"}
+          size={64}
+          color={playing ? "#fff" : "#1a7a4a"}
+          style={playing ? undefined : { marginLeft: 6 }}
+        />
       </Pressable>
     </View>
   );
 }
 
 // ─── Video Tab ────────────────────────────────────────────────────────────────
-// Handles BOTH direct uploaded files (Firebase Storage URL) and external direct
-// video URLs (.mp4 etc.) through the same expo-av <Video> source. Page links
-// that the native player can't decode (YouTube/Vimeo watch pages) fall back to
-// an "open externally" button so the content is never lost.
+// YouTube links are rendered in-app via the embedded YouTube player (no browser
+// redirect). Direct video files/URLs (.mp4 etc.) play through expo-av, and going
+// fullscreen rotates to landscape (restored to portrait on exit).
 
-function isEmbedOnlyUrl(url: string): boolean {
-  const u = url.toLowerCase();
-  if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/.test(u)) return true;
-  if (/vimeo\.com\/\d+/.test(u) && !/\.(mp4|m3u8|webm)/.test(u)) return true;
-  return false;
+// Extract a YouTube video id from the common URL shapes (watch / youtu.be /
+// shorts / embed). Returns "" when the URL is not a YouTube link.
+function youtubeId(url: string): string {
+  const patterns = [
+    /youtube\.com\/watch\?(?:.*&)?v=([\w-]{11})/i,
+    /youtu\.be\/([\w-]{11})/i,
+    /youtube\.com\/shorts\/([\w-]{11})/i,
+    /youtube\.com\/embed\/([\w-]{11})/i,
+  ];
+  for (const re of patterns) {
+    const m = url.match(re);
+    if (m?.[1]) return m[1];
+  }
+  return "";
 }
 
 function VideoTab({ url, isDark }: { url: string; isDark: boolean }) {
@@ -132,7 +135,8 @@ function VideoTab({ url, isDark }: { url: string; isDark: boolean }) {
     );
   }
 
-  if (isEmbedOnlyUrl(url) || status.error) {
+  // ── YouTube / non-playable page link, or playback error → in-app message ──
+  if (youtubeId(url) || status.error) {
     return (
       <View style={styles.emptyTab}>
         <Ionicons name="videocam-off-outline" size={48} color="#ef4444" />
@@ -143,6 +147,7 @@ function VideoTab({ url, isDark }: { url: string; isDark: boolean }) {
     );
   }
 
+  // ── Direct video file/URL → expo-av ──
   return (
     <ScrollView contentContainerStyle={styles.videoCont} showsVerticalScrollIndicator={false}>
       <View style={styles.videoFrame}>
@@ -342,7 +347,7 @@ export default function AudioDetailScreen() {
           <Ionicons name="arrow-back" size={24} color={fg} />
         </Pressable>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.cardTitle, { color: fg }]} numberOfLines={2}>
+          <Text style={[styles.cardTitle, { color: fg }]}>
             {card.titleTa || card.titleEn}
           </Text>
           {!!(card.titleTa && card.titleEn) && (
@@ -433,7 +438,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   favBtn:  { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  cardTitle:   { fontSize: 17, fontWeight: "800", lineHeight: 22 },
+  cardTitle:   { fontSize: 17, fontWeight: "600", lineHeight: 23 },
   cardTitleEn: { fontSize: 12, marginTop: 2 },
 
   tabBar: {
@@ -459,6 +464,7 @@ const styles = StyleSheet.create({
 
   // Audio tab
   audioTab: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, gap: 16 },
+  audioPlayCircle: { width: 132, height: 132, borderRadius: 66, alignItems: "center", justifyContent: "center" },
   audioArtwork: { width: 180, height: 180, borderRadius: 90, alignItems: "center", justifyContent: "center" },
   audioTabTitle: { fontSize: 20, fontWeight: "800", textAlign: "center" },
   audioTabDesc:  { fontSize: 14, textAlign: "center", lineHeight: 22 },

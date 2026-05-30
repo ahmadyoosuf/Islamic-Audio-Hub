@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Islamic Audio Hub",
+    "name": "Hilal",
     "slug": "islamic-audio-hub",
-    "version": "1.2.2",
+    "version": "1.2.3",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "islamic-audio-hub",

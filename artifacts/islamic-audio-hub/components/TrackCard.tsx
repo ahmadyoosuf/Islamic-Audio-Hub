@@ -187,7 +187,6 @@ export default function TrackCard({
             { color: colors.foreground },
             isActive && { color: catColor },
           ]}
-          numberOfLines={2}
         >
           {track.title}
         </Text>
@@ -257,7 +256,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
     lineHeight: 20,
   },
   meta: {
@@ -291,7 +290,7 @@ const styles = StyleSheet.create({
   },
   compactTitle: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   compactMeta: {
     fontSize: 11,

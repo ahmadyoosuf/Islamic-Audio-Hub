@@ -1,31 +1,53 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState, useCallback } from "react";
+import React from "react";
 import {
-  Platform, ScrollView, StyleSheet, Text, View, useColorScheme,
+  Platform, ScrollView, StyleSheet, Text, View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect } from "expo-router";
 import AudioPlayer from "@/components/AudioPlayer";
 import TrackCard from "@/components/TrackCard";
 import { useApp } from "@/context/AppContext";
-import { getAllTracks, type UnifiedTrack } from "@/data/unifiedStorage";
+import type { Track } from "@/context/AppContext";
 import { useColors } from "@/hooks/useColors";
+import { useAllCards, useCategories } from "@/hooks/useFirebaseData";
+import type { FBCard } from "@/services/firebase.firestore";
+
+// FBCard → Track (favorites store the Firebase card id)
+function fbCardToTrack(c: FBCard, categoryName: string): Track {
+  return {
+    id:          c.id,
+    title:       c.titleTa || c.titleEn,
+    categoryId:  c.categoryId,
+    categoryName,
+    duration:    c.duration,
+    audioUrl:    c.audioUrl,
+    viewCount:   c.viewCount,
+    isPremium:   c.isPremium,
+    sortOrder:   c.sortOrder,
+    hasQuiz:     c.hasQuiz,
+    isBuiltIn:   false,
+    description: c.description,
+    fileName:    undefined,
+    uploadedAt:  c.createdAt,
+  };
+}
 
 export default function FavoritesScreen() {
   const colors = useColors();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const isDark = colors.isDark;
   const insets = useSafeAreaInsets();
   const { favorites } = useApp();
-  const [allTracks, setAllTracks] = useState<UnifiedTrack[]>([]);
 
-  useFocusEffect(
-    useCallback(() => {
-      getAllTracks().then(setAllTracks);
-    }, [])
-  );
+  // Firebase is the single source of truth (same as Home) — fixes favorites
+  // never showing up because the old code read from empty local storage.
+  const { cards } = useAllCards();
+  const { categories } = useCategories();
+  const catName = (id: string) => categories.find(c => c.id === id)?.name ?? "";
 
-  const favTracks = allTracks.filter((t) => favorites.includes(t.id));
+  const favTracks: Track[] = cards
+    .filter(c => favorites.includes(c.id))
+    .map(c => fbCardToTrack(c, catName(c.categoryId)));
+
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const botPad = Platform.OS === "web" ? 34 + 84 : insets.bottom + 60;
 
@@ -65,7 +87,7 @@ export default function FavoritesScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  title: { fontSize: 28, fontWeight: "800", marginBottom: 4 },
+  title: { fontSize: 26, fontWeight: "700", marginBottom: 4 },
   subtitle: { fontSize: 14, marginBottom: 24 },
   empty: { alignItems: "center", justifyContent: "center", paddingTop: 80, gap: 16 },
   emptyIcon: {

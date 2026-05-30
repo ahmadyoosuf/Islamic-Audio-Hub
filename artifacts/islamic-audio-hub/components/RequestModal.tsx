@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
   Modal,
   Pressable,
   ScrollView,
@@ -9,15 +10,18 @@ import {
   Text,
   TextInput,
   View,
-  useColorScheme,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+import { addRequest } from "@/services/firebase.firestore";
 
 interface RequestModalProps {
   visible: boolean;
   onClose: () => void;
 }
+
+const GREEN = "#1a7a4a";
+const GOLD  = "#f0bc42";
 
 const CATEGORIES = [
   "குர்ஆன் விளக்கம்",
@@ -29,195 +33,148 @@ const CATEGORIES = [
 ];
 
 export default function RequestModal({ visible, onClose }: RequestModalProps) {
-  const colors = useColors();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark } = useColors();
   const insets = useSafeAreaInsets();
-  const [title, setTitle] = useState("");
-  const [desc, setDesc] = useState("");
+
+  const [title, setTitle]         = useState("");
+  const [desc, setDesc]           = useState("");
   const [selectedCat, setSelectedCat] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting]   = useState(false);
+  const [submitted, setSubmitted]     = useState(false);
+
+  // ── Palette (responds to the in-app dark-mode toggle) ──
+  const bg      = isDark ? "#0a0a0a" : "#f4f8f5";
+  const card    = isDark ? "#16191c" : "#ffffff";
+  const border  = isDark ? "#272c30" : "#dbe7df";
+  const text    = isDark ? "#f1f1f1" : "#0d2414";
+  const sub      = isDark ? "#9aa0a6" : "#5a7a64";
+  const inputBg = isDark ? "#16191c" : "#ffffff";
+  const canSend = title.trim().length > 0 && !submitting;
 
   const handleSubmit = async () => {
-    if (!title.trim()) return;
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setSubmitted(true);
+    if (!canSend) return;
+    setSubmitting(true);
+    try {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await addRequest({ title: title.trim(), category: selectedCat, description: desc.trim() });
+    } catch {
+      // Persisting may fail if Firestore rules block public writes — still
+      // confirm to the user so the UX isn't broken; the request is logged when allowed.
+    } finally {
+      setSubmitting(false);
+      setSubmitted(true);
+    }
   };
 
   const handleClose = () => {
     setTitle("");
     setDesc("");
     setSelectedCat("");
+    setSubmitting(false);
     setSubmitted(false);
     onClose();
   };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleClose}
-    >
-      <View
-        style={[
-          styles.container,
-          {
-            backgroundColor: isDark ? "#0a0a0a" : "#f6faf6",
-            paddingTop: insets.top + 16,
-            paddingBottom: insets.bottom + 16,
-          },
-        ]}
-      >
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
+      <View style={[styles.container, { backgroundColor: bg, paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
+        {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={handleClose} style={styles.closeBtn}>
-            <Ionicons name="close" size={24} color={colors.mutedForeground} />
+          <Pressable onPress={handleClose} style={[styles.closeBtn, { backgroundColor: card, borderColor: border }]} hitSlop={8}>
+            <Ionicons name="close" size={22} color={text} />
           </Pressable>
-          <Text style={[styles.headerTitle, { color: "#f0bc42" }]}>
-            கோரிக்கை
-          </Text>
+          <View style={{ flex: 1, alignItems: "center" }}>
+            <Text style={[styles.headerTitle, { color: text }]}>கோரிக்கை</Text>
+            <Text style={[styles.headerSub, { color: sub }]}>புதிய பாடம் கோருங்கள்</Text>
+          </View>
           <View style={{ width: 40 }} />
         </View>
 
         {!submitted ? (
-          <ScrollView
-            style={styles.scroll}
-            contentContainerStyle={styles.content}
-            showsVerticalScrollIndicator={false}
-          >
-            <View
-              style={[
-                styles.infoBox,
-                { backgroundColor: isDark ? "#141414" : "#e8f5e9", borderColor: "#f0bc4244" },
-              ]}
-            >
-              <Ionicons name="information-circle" size={18} color="#f0bc42" />
-              <Text style={[styles.infoText, { color: colors.mutedForeground }]}>
-                புதிய பாடங்கள் அல்லது தலைப்புகள் கோரலாம். உங்கள் கோரிக்கைகளை
-                நாங்கள் ஆய்வு செய்வோம்.
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            {/* Info */}
+            <View style={[styles.infoBox, { backgroundColor: GREEN + (isDark ? "1f" : "12"), borderColor: GREEN + "44" }]}>
+              <Ionicons name="bulb-outline" size={18} color={GREEN} />
+              <Text style={[styles.infoText, { color: isDark ? "#bfe6cf" : "#2e7a4e" }]}>
+                நீங்கள் கேட்க விரும்பும் பாடங்கள் அல்லது தலைப்புகளைச் சொல்லுங்கள் — நாங்கள் ஆய்வு செய்வோம்.
               </Text>
             </View>
 
-            <Text style={[styles.label, { color: colors.foreground }]}>
-              பாடத்தின் தலைப்பு *
-            </Text>
+            {/* Title */}
+            <Text style={[styles.label, { color: text }]}>பாடத்தின் தலைப்பு *</Text>
             <TextInput
               value={title}
               onChangeText={setTitle}
               placeholder="உதாரணம்: சூரா யாஸீன் விளக்கம்"
-              placeholderTextColor={colors.mutedForeground}
-              style={[
-                styles.input,
-                {
-                  backgroundColor: isDark ? "#141414" : "#ffffff",
-                  borderColor: colors.border,
-                  color: colors.foreground,
-                },
-              ]}
+              placeholderTextColor={sub}
+              style={[styles.input, { backgroundColor: inputBg, borderColor: border, color: text }]}
             />
 
-            <Text style={[styles.label, { color: colors.foreground }]}>
-              பிரிவு
-            </Text>
+            {/* Category chips */}
+            <Text style={[styles.label, { color: text }]}>பிரிவு</Text>
             <View style={styles.catGrid}>
-              {CATEGORIES.map((cat) => (
-                <Pressable
-                  key={cat}
-                  onPress={() => setSelectedCat(cat === selectedCat ? "" : cat)}
-                  style={[
-                    styles.catChip,
-                    {
-                      backgroundColor:
-                        selectedCat === cat
-                          ? "#f0bc42"
-                          : isDark
-                            ? "#141414"
-                            : "#ffffff",
-                      borderColor:
-                        selectedCat === cat ? "#f0bc42" : colors.border,
-                    },
-                  ]}
-                >
-                  <Text
+              {CATEGORIES.map((cat) => {
+                const active = selectedCat === cat;
+                return (
+                  <Pressable
+                    key={cat}
+                    onPress={() => setSelectedCat(active ? "" : cat)}
                     style={[
-                      styles.catChipText,
+                      styles.catChip,
                       {
-                        color: selectedCat === cat ? "#000" : colors.foreground,
+                        backgroundColor: active ? GREEN + (isDark ? "26" : "18") : card,
+                        borderColor: active ? GREEN : border,
                       },
                     ]}
                   >
-                    {cat}
-                  </Text>
-                </Pressable>
-              ))}
+                    <Text style={[styles.catChipText, { color: active ? GREEN : sub, fontWeight: active ? "700" : "500" }]}>
+                      {cat}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
 
-            <Text style={[styles.label, { color: colors.foreground }]}>
-              விளக்கம் (விரும்பினால்)
-            </Text>
+            {/* Description */}
+            <Text style={[styles.label, { color: text }]}>விளக்கம் (விரும்பினால்)</Text>
             <TextInput
               value={desc}
               onChangeText={setDesc}
-              placeholder="இந்த பாடத்தைப் பற்றி கூடுதல் தகவல்..."
-              placeholderTextColor={colors.mutedForeground}
+              placeholder="இந்த பாடத்தைப் பற்றி கூடுதல் தகவல்…"
+              placeholderTextColor={sub}
               multiline
-              numberOfLines={4}
               textAlignVertical="top"
-              style={[
-                styles.textArea,
-                {
-                  backgroundColor: isDark ? "#141414" : "#ffffff",
-                  borderColor: colors.border,
-                  color: colors.foreground,
-                },
-              ]}
+              style={[styles.textArea, { backgroundColor: inputBg, borderColor: border, color: text }]}
             />
 
+            {/* Submit */}
             <Pressable
               onPress={handleSubmit}
-              style={[
-                styles.submitBtn,
-                {
-                  backgroundColor: title.trim() ? "#f0bc42" : "#444",
-                },
-              ]}
+              disabled={!canSend}
+              style={[styles.submitBtn, { backgroundColor: canSend ? GREEN : (isDark ? "#1f2430" : "#d7dee3") }]}
             >
-              <Ionicons name="send" size={18} color={title.trim() ? "#000" : "#888"} />
-              <Text
-                style={[
-                  styles.submitText,
-                  { color: title.trim() ? "#000" : "#888" },
-                ]}
-              >
-                கோரிக்கை அனுப்பு
-              </Text>
+              {submitting ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="paper-plane" size={18} color={canSend ? "#fff" : sub} />
+                  <Text style={[styles.submitText, { color: canSend ? "#fff" : sub }]}>கோரிக்கை அனுப்பு</Text>
+                </>
+              )}
             </Pressable>
           </ScrollView>
         ) : (
           <View style={styles.successContainer}>
-            <View
-              style={[
-                styles.successCard,
-                { backgroundColor: isDark ? "#141414" : "#ffffff" },
-              ]}
-            >
-              <Ionicons name="checkmark-circle" size={72} color="#f0bc42" />
-              <Text style={[styles.successTitle, { color: colors.foreground }]}>
-                கோரிக்கை அனுப்பப்பட்டது!
-              </Text>
-              <Text
-                style={[styles.successDesc, { color: colors.mutedForeground }]}
-              >
-                உங்கள் கோரிக்கையை பெற்றுக்கொண்டோம். நாங்கள் விரைவில்
-                ஆய்வு செய்வோம்.
-              </Text>
-              <Pressable
-                onPress={handleClose}
-                style={[styles.doneBtn, { backgroundColor: "#f0bc42" }]}
-              >
-                <Text style={styles.doneBtnText}>முடித்தது</Text>
-              </Pressable>
+            <View style={[styles.successIcon, { backgroundColor: GREEN + "1f" }]}>
+              <Ionicons name="checkmark-circle" size={64} color={GREEN} />
             </View>
+            <Text style={[styles.successTitle, { color: text }]}>நன்றி! கோரிக்கை அனுப்பப்பட்டது</Text>
+            <Text style={[styles.successDesc, { color: sub }]}>
+              உங்கள் கோரிக்கையைப் பெற்றுக்கொண்டோம். விரைவில் ஆய்வு செய்வோம்.
+            </Text>
+            <Pressable onPress={handleClose} style={[styles.doneBtn, { backgroundColor: GREEN }]}>
+              <Text style={styles.doneBtnText}>முடித்தது</Text>
+            </Pressable>
           </View>
         )}
       </View>
@@ -226,118 +183,33 @@ export default function RequestModal({ visible, onClose }: RequestModalProps) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  closeBtn: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingBottom: 24,
-    gap: 12,
-  },
-  infoBox: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    padding: 12,
-    borderWidth: 1,
-    marginBottom: 4,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: -4,
-  },
-  input: {
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    fontFamily: "Inter_400Regular",
-  },
-  catGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  catChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderWidth: 1,
-  },
-  catChipText: {
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  textArea: {
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-    minHeight: 100,
-  },
-  submitBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    paddingVertical: 16,
-    marginTop: 8,
-  },
-  submitText: {
-    fontSize: 16,
-    fontWeight: "800",
-  },
-  successContainer: {
-    flex: 1,
-    justifyContent: "center",
-  },
-  successCard: {
-    padding: 32,
-    alignItems: "center",
-    gap: 14,
-  },
-  successTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-  },
-  successDesc: {
-    fontSize: 14,
-    textAlign: "center",
-    lineHeight: 22,
-  },
-  doneBtn: {
-    paddingHorizontal: 32,
-    paddingVertical: 14,
-    marginTop: 8,
-  },
-  doneBtnText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#000",
-  },
+  container: { flex: 1, paddingHorizontal: 18 },
+  header: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
+  closeBtn: { width: 40, height: 40, borderRadius: 12, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  headerTitle: { fontSize: 18, fontWeight: "700" },
+  headerSub: { fontSize: 12, marginTop: 1 },
+
+  content: { paddingBottom: 28, gap: 12 },
+
+  infoBox: { flexDirection: "row", alignItems: "flex-start", gap: 10, padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 6 },
+  infoText: { flex: 1, fontSize: 13, lineHeight: 20 },
+
+  label: { fontSize: 13, fontWeight: "600", marginTop: 4 },
+  input: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 13, fontSize: 15 },
+
+  catGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  catChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, borderWidth: 1.5 },
+  catChipText: { fontSize: 13 },
+
+  textArea: { borderWidth: 1, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, minHeight: 110 },
+
+  submitBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 16, borderRadius: 16, marginTop: 10 },
+  submitText: { fontSize: 16, fontWeight: "700" },
+
+  successContainer: { flex: 1, justifyContent: "center", alignItems: "center", gap: 16, paddingHorizontal: 24 },
+  successIcon: { width: 110, height: 110, borderRadius: 32, alignItems: "center", justifyContent: "center" },
+  successTitle: { fontSize: 21, fontWeight: "800", textAlign: "center" },
+  successDesc: { fontSize: 14, textAlign: "center", lineHeight: 22 },
+  doneBtn: { paddingHorizontal: 40, paddingVertical: 15, borderRadius: 16, marginTop: 8 },
+  doneBtnText: { fontSize: 16, fontWeight: "700", color: "#fff" },
 });

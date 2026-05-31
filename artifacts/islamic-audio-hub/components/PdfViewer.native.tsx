@@ -1,5 +1,5 @@
 // Native inline PDF viewer (Android/iOS).
-// Renders ALL pages, one by one, vertically scrollable — no external browser.
+// Paged: one full page per screen, swipe horizontally to the next — no browser.
 // react-native-pdf is require()'d lazily and guarded so a missing native module
 // (e.g. Expo Go) shows an in-app message instead of hard-crashing the screen.
 
@@ -52,10 +52,10 @@ export default function PdfViewer({ url, isDark }: Props) {
       <Pdf
         source={{ uri: url, cache: true }}
         trustAllCerts={false}
-        horizontal={false}
-        enablePaging={false}
-        fitPolicy={0}
-        spacing={8}
+        horizontal={true}
+        enablePaging={true}
+        fitPolicy={2}
+        spacing={0}
         style={[styles.pdf, { backgroundColor: bg }]}
         onLoadComplete={(numberOfPages: number) => { setPages(numberOfPages); setLoading(false); }}
         onPageChanged={(p: number) => setPage(p)}

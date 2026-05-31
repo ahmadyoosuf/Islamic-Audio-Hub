@@ -49,7 +49,7 @@ export function pickVideoFileWeb(): Promise<File | null> {
 }
 
 export function pickDocFileWeb(): Promise<File | null> {
-  return pickFileWeb(".pdf,.ppt,.pptx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation");
+  return pickFileWeb(".pdf,application/pdf");
 }
 
 // Generic <input type="file"> picker for web — returns the real File (Blob).

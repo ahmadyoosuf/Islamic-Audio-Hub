@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Video, ResizeMode } from "expo-av";
 import * as Haptics from "expo-haptics";
-import * as WebBrowser from "expo-web-browser";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState, useEffect, useRef } from "react";
 import {
@@ -22,6 +21,7 @@ import { useAudio } from "@/context/AudioContext";
 import { useApp } from "@/context/AppContext";
 import { getCardById, type FBCard } from "@/services/firebase.firestore";
 import { slideKindFromUrl } from "@/services/firebase.storage";
+import PdfViewer from "@/components/PdfViewer";
 import type { Track } from "@/context/AppContext";
 
 // ─── Tab definition ───────────────────────────────────────────────────────────
@@ -78,43 +78,46 @@ function AudioTab({ url, label, card, isDark }: { url: string; label: string; ca
     );
   }
 
+  const playing = isActive && isPlaying;
   return (
     <View style={styles.audioTab}>
-      <View style={[styles.audioArtwork, { backgroundColor: isDark ? "#1a3a2a" : "#e8f5ee" }]}>
-        <Ionicons name="musical-notes" size={72} color="#1a7a4a" />
-      </View>
-      <Text style={[styles.audioTabTitle, { color: isDark ? "#fff" : "#0d2414" }]}>
-        {card.titleTa || card.titleEn}
-      </Text>
-      {!!card.description && (
-        <Text style={[styles.audioTabDesc, { color: isDark ? "#aaa" : "#5a7a64" }]} numberOfLines={3}>
-          {card.description}
-        </Text>
-      )}
+      {/* Single, clean play/pause control — the title already shows in the top bar */}
       <Pressable
         onPress={handlePlay}
-        style={[styles.playBtn, { backgroundColor: "#1a7a4a" }]}
+        style={[styles.audioPlayCircle, { backgroundColor: playing ? "#1a7a4a" : (isDark ? "#1a3a2a" : "#e8f5ee") }]}
+        accessibilityRole="button"
+        accessibilityLabel={playing ? "Pause" : "Play"}
       >
-        <Ionicons name={isActive && isPlaying ? "pause" : "play"} size={26} color="#fff" />
-        <Text style={styles.playBtnTxt}>
-          {isActive && isPlaying ? "இடைநிறுத்து" : label + " கேளுங்கள்"}
-        </Text>
+        <Ionicons
+          name={playing ? "pause" : "play"}
+          size={64}
+          color={playing ? "#fff" : "#1a7a4a"}
+          style={playing ? undefined : { marginLeft: 6 }}
+        />
       </Pressable>
     </View>
   );
 }
 
 // ─── Video Tab ────────────────────────────────────────────────────────────────
-// Handles BOTH direct uploaded files (Firebase Storage URL) and external direct
-// video URLs (.mp4 etc.) through the same expo-av <Video> source. Page links
-// that the native player can't decode (YouTube/Vimeo watch pages) fall back to
-// an "open externally" button so the content is never lost.
+// YouTube links are rendered in-app via the embedded YouTube player (no browser
+// redirect). Direct video files/URLs (.mp4 etc.) play through expo-av, and going
+// fullscreen rotates to landscape (restored to portrait on exit).
 
-function isEmbedOnlyUrl(url: string): boolean {
-  const u = url.toLowerCase();
-  if (/youtube\.com\/watch|youtu\.be\/|youtube\.com\/shorts/.test(u)) return true;
-  if (/vimeo\.com\/\d+/.test(u) && !/\.(mp4|m3u8|webm)/.test(u)) return true;
-  return false;
+// Extract a YouTube video id from the common URL shapes (watch / youtu.be /
+// shorts / embed). Returns "" when the URL is not a YouTube link.
+function youtubeId(url: string): string {
+  const patterns = [
+    /youtube\.com\/watch\?(?:.*&)?v=([\w-]{11})/i,
+    /youtu\.be\/([\w-]{11})/i,
+    /youtube\.com\/shorts\/([\w-]{11})/i,
+    /youtube\.com\/embed\/([\w-]{11})/i,
+  ];
+  for (const re of patterns) {
+    const m = url.match(re);
+    if (m?.[1]) return m[1];
+  }
+  return "";
 }
 
 function VideoTab({ url, isDark }: { url: string; isDark: boolean }) {
@@ -132,24 +135,19 @@ function VideoTab({ url, isDark }: { url: string; isDark: boolean }) {
     );
   }
 
-  if (isEmbedOnlyUrl(url) || status.error) {
+  // ── YouTube / non-playable page link, or playback error → in-app message ──
+  if (youtubeId(url) || status.error) {
     return (
       <View style={styles.emptyTab}>
-        <Ionicons name="logo-youtube" size={48} color="#ef4444" />
+        <Ionicons name="videocam-off-outline" size={48} color="#ef4444" />
         <Text style={[styles.emptyTabTxt, { color: isDark ? "#aaa" : "#5a7a64" }]}>
-          இந்த வீடியோ வெளிப்புற இணைப்பில் உள்ளது
+          இந்த வீடியோ வடிவம் செயலியில் இயக்க முடியாது. நேரடி வீடியோ கோப்பை (.mp4) பதிவேற்றவும்.
         </Text>
-        <Pressable
-          onPress={() => WebBrowser.openBrowserAsync(url)}
-          style={[styles.playBtn, { backgroundColor: "#ef4444" }]}
-        >
-          <Ionicons name="open-outline" size={22} color="#fff" />
-          <Text style={styles.playBtnTxt}>வீடியோவைத் திற</Text>
-        </Pressable>
       </View>
     );
   }
 
+  // ── Direct video file/URL → expo-av ──
   return (
     <ScrollView contentContainerStyle={styles.videoCont} showsVerticalScrollIndicator={false}>
       <View style={styles.videoFrame}>
@@ -189,47 +187,30 @@ function ReadTab({ content, isDark }: { content: string; isDark: boolean }) {
 }
 
 // ─── Slide Tab ────────────────────────────────────────────────────────────────
-// Supports three slide formats:
-//   • image  → rendered inline with <Image>
-//   • pdf    → opened in the system browser (renders natively everywhere)
-//   • ppt    → wrapped through the Office Online viewer so .ppt/.pptx render
-// The doc viewer is dependency-free (no WebView) and works on web + native.
+// Slides render entirely in-app (no external browser):
+//   • pdf   → native multi-page, vertically-scrollable PdfViewer
+//   • image → legacy image slides still render inline with <Image>
+//   • ppt   → not natively renderable in RN → in-app "convert to PDF" message
 
-function officeViewerUrl(docUrl: string): string {
-  return "https://view.officeapps.live.com/op/view.aspx?src=" + encodeURIComponent(docUrl);
-}
-
-function DocSlide({ docUrl, isDark }: { docUrl: string; isDark: boolean }) {
-  const kind = slideKindFromUrl(docUrl);
-  const isPpt = kind === "ppt";
-  const open = () =>
-    WebBrowser.openBrowserAsync(isPpt ? officeViewerUrl(docUrl) : docUrl);
-
+function PptNotice({ isDark }: { isDark: boolean }) {
   return (
     <View style={styles.emptyTab}>
-      <View style={[styles.docBadge, { backgroundColor: isPpt ? "#d2440022" : "#b3000022" }]}>
-        <Ionicons
-          name={isPpt ? "easel" : "document-text"}
-          size={56}
-          color={isPpt ? "#d24400" : "#b30000"}
-        />
-      </View>
+      <Ionicons name="easel-outline" size={48} color="#d24400" />
       <Text style={[styles.docTitle, { color: isDark ? "#fff" : "#0d2414" }]}>
-        {isPpt ? "PowerPoint வழங்கல்" : "PDF ஆவணம்"}
+        PowerPoint ஆதரிக்கப்படவில்லை
       </Text>
       <Text style={[styles.emptyTabTxt, { color: isDark ? "#888" : "#5a7a64" }]}>
-        {(() => { try { return decodeURIComponent(docUrl.split("/").pop()?.split("?")[0] ?? ""); } catch { return ""; } })()}
+        இந்த ஸ்லைடு PDF ஆக மாற்றி மீண்டும் பதிவேற்றப்பட வேண்டும்.
       </Text>
-      <Pressable onPress={open} style={[styles.playBtn, { backgroundColor: "#1a7a4a" }]}>
-        <Ionicons name="open-outline" size={22} color="#fff" />
-        <Text style={styles.playBtnTxt}>ஆவணத்தைத் திற</Text>
-      </Pressable>
     </View>
   );
 }
 
 function SlideTab({ imageUrl, docUrl, isDark }: { imageUrl: string; docUrl: string; isDark: boolean }) {
-  if (!imageUrl && !docUrl) {
+  // The document field (PDF) takes priority; fall back to the legacy image field.
+  const src = docUrl || imageUrl;
+
+  if (!src) {
     return (
       <View style={styles.emptyTab}>
         <Ionicons name="easel-outline" size={48} color="#888" />
@@ -240,16 +221,22 @@ function SlideTab({ imageUrl, docUrl, isDark }: { imageUrl: string; docUrl: stri
     );
   }
 
-  if (imageUrl && slideKindFromUrl(imageUrl) !== "pdf" && slideKindFromUrl(imageUrl) !== "ppt") {
+  const kind = slideKindFromUrl(src);
+
+  if (kind === "ppt") {
+    return <PptNotice isDark={isDark} />;
+  }
+
+  if (kind === "image") {
     return (
       <ScrollView contentContainerStyle={styles.slideCont} showsVerticalScrollIndicator={false}>
-        <Image source={{ uri: imageUrl }} style={styles.slideImage} resizeMode="contain" />
+        <Image source={{ uri: src }} style={styles.slideImage} resizeMode="contain" />
       </ScrollView>
     );
   }
 
-  // Document slide (pdf / ppt) — from slideDocUrl, or a doc pasted into the image field
-  return <DocSlide docUrl={docUrl || imageUrl} isDark={isDark} />;
+  // pdf — or a doc URL with no obvious extension (the field is PDF-only) → native viewer
+  return <PdfViewer url={src} isDark={isDark} />;
 }
 
 // ─── Quiz Tab ─────────────────────────────────────────────────────────────────
@@ -290,6 +277,8 @@ function QuizTab({ card, isDark }: { card: FBCard; isDark: boolean }) {
         onClose={() => setShowQuiz(false)}
         trackId={card.id}
         trackTitle={card.titleTa || card.titleEn}
+        categoryId={card.categoryId}
+        firestoreQuestions={card.quiz}
         prizeEnabled={false}
       />
     </View>
@@ -358,7 +347,7 @@ export default function AudioDetailScreen() {
           <Ionicons name="arrow-back" size={24} color={fg} />
         </Pressable>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.cardTitle, { color: fg }]} numberOfLines={2}>
+          <Text style={[styles.cardTitle, { color: fg }]}>
             {card.titleTa || card.titleEn}
           </Text>
           {!!(card.titleTa && card.titleEn) && (
@@ -449,7 +438,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   favBtn:  { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
-  cardTitle:   { fontSize: 17, fontWeight: "800", lineHeight: 22 },
+  cardTitle:   { fontSize: 17, fontWeight: "600", lineHeight: 23 },
   cardTitleEn: { fontSize: 12, marginTop: 2 },
 
   tabBar: {
@@ -475,6 +464,7 @@ const styles = StyleSheet.create({
 
   // Audio tab
   audioTab: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, gap: 16 },
+  audioPlayCircle: { width: 132, height: 132, borderRadius: 66, alignItems: "center", justifyContent: "center" },
   audioArtwork: { width: 180, height: 180, borderRadius: 90, alignItems: "center", justifyContent: "center" },
   audioTabTitle: { fontSize: 20, fontWeight: "800", textAlign: "center" },
   audioTabDesc:  { fontSize: 14, textAlign: "center", lineHeight: 22 },

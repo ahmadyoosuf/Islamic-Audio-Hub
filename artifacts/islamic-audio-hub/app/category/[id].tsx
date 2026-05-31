@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
     alignSelf: "center", marginBottom: 12,
   },
   cardTamil: {
-    fontSize: 14, fontWeight: "800", textAlign: "center",
+    fontSize: 14, fontWeight: "600", textAlign: "center",
     paddingHorizontal: 10, lineHeight: 20, marginBottom: 2,
   },
   cardEnglish: {

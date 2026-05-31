@@ -235,6 +235,20 @@ export async function getCards(subcategoryId?: string, categoryId?: string): Pro
   return all;
 }
 
+// ─── Content requests (from users) ────────────────────────────────────────────
+
+export async function addRequest(
+  data: { title: string; category: string; description: string }
+): Promise<string> {
+  const ref = await addDoc(collection(db, "requests"), {
+    title:       data.title,
+    category:    data.category,
+    description: data.description,
+    createdAt:   serverTimestamp(),
+  });
+  return ref.id;
+}
+
 // ─── Single-document listeners ────────────────────────────────────────────────
 
 export function subscribeCategory(

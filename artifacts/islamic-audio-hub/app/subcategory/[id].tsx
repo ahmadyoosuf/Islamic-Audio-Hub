@@ -103,7 +103,7 @@ function CardRow({
 
           {/* Titles */}
           <View style={styles.titleBlock}>
-            <Text style={[styles.tamilTitle, { color: isActive ? color : textMain }]} numberOfLines={2}>
+            <Text style={[styles.tamilTitle, { color: isActive ? color : textMain }]}>
               {card.titleTa || card.titleEn}
             </Text>
             {!!card.titleEn && card.titleEn !== card.titleTa && (
@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
   indexNum: { fontSize: 15, fontWeight: "800" },
 
   titleBlock: { flex: 1, gap: 2 },
-  tamilTitle: { fontSize: 14, fontWeight: "700", lineHeight: 20 },
+  tamilTitle: { fontSize: 14, fontWeight: "500", lineHeight: 20 },
   engTitle:   { fontSize: 11, lineHeight: 16 },
   metaRow:    { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 4 },
   metaTxt:    { fontSize: 10 },

@@ -1,6 +1,6 @@
 import { BlurView } from "expo-blur";
 import { Tabs } from "expo-router";
-import { Home, Heart, User, Info, Sparkles } from "lucide-react-native";
+import { Home, Heart, Info, Sparkles } from "lucide-react-native";
 import React, { useState } from "react";
 import { Platform, StyleSheet, View, useColorScheme } from "react-native";
 import RequestModal from "@/components/RequestModal";
@@ -65,15 +65,6 @@ export default function TabLayout() {
             title: "பிடித்தவை",
             tabBarIcon: ({ color }) => (
               <Heart size={22} color={color} strokeWidth={2} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="profile"
-          options={{
-            title: "சுயவிவரம்",
-            tabBarIcon: ({ color }) => (
-              <User size={22} color={color} strokeWidth={2} />
             ),
           }}
         />

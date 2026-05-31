@@ -17,8 +17,9 @@ import AudioPlayer from "@/components/AudioPlayer";
 import CoinBadge from "@/components/CoinBadge";
 import CoinPopup from "@/components/CoinPopup";
 import DailyQuizModal from "@/components/DailyQuizModal";
-import { useAudio } from "@/context/AudioContext";
 import { useApp } from "@/context/AppContext";
+import { useBadges } from "@/context/BadgesContext";
+import { BADGE_DEFS, type BadgeId } from "@/services/badges.firebase";
 import type { StoredCategory, UnifiedTrack } from "@/data/unifiedStorage";
 import { useCategories, useAllCards } from "@/hooks/useFirebaseData";
 import type { FBCategory, FBCard } from "@/services/firebase.firestore";
@@ -144,41 +145,6 @@ function CategoryCard({
   );
 }
 
-// ─── Featured Track Banner ────────────────────────────────────────────────────
-function FeaturedTrack({ tracks, categories, isDark }: { tracks: UnifiedTrack[]; categories: StoredCategory[]; isDark: boolean }) {
-  const { playTrack, currentTrack, isPlaying } = useAudio();
-  const router = useRouter();
-  const freeTrack = tracks.find(t => !t.isPremium);
-  if (!freeTrack) return null;
-  const cat = categories.find(c => c.id === freeTrack.categoryId);
-  const color = cat?.color ?? C.goldBright;
-  const isActive = currentTrack?.id === freeTrack.id;
-  return (
-    <Pressable
-      onPress={() => router.push(`/audio/${freeTrack.id}` as any)}
-      style={[styles.featured, { backgroundColor: isDark ? "#0d1f16" : C.goldLight, borderColor: isDark ? C.goldBright + "33" : "#e8c96a" }]}
-    >
-      <View style={styles.featuredLeft}>
-        <View style={[styles.featuredBadge, { backgroundColor: C.goldBright }]}>
-          <Ionicons name="gift" size={10} color="#000" />
-          <Text style={styles.featuredBadgeTxt}>இன்று இலவசம்</Text>
-        </View>
-        <Text style={[styles.featuredTitle, { color: isDark ? "#fff" : C.textMain }]} numberOfLines={2}>
-          {freeTrack.title}
-        </Text>
-        <Text style={[styles.featuredCat, { color: C.gold }]}>{cat?.name ?? ""}</Text>
-      </View>
-      <TouchableOpacity
-        onPress={() => playTrack(freeTrack, tracks.filter(t => t.categoryId === freeTrack.categoryId))}
-        style={[styles.playBtn, { backgroundColor: isActive && isPlaying ? C.goldBright : C.goldBright + "22" }]}
-        activeOpacity={0.8}
-      >
-        <Ionicons name={isActive && isPlaying ? "pause" : "play"} size={20} color={isActive && isPlaying ? "#000" : C.goldBright} />
-      </TouchableOpacity>
-    </Pressable>
-  );
-}
-
 // ─── Bismillah Banner ─────────────────────────────────────────────────────────
 function BismillahBanner({ isDark }: { isDark: boolean }) {
   return (
@@ -241,38 +207,32 @@ function DailyQuizBanner({ isDark, onPress }: { isDark: boolean; onPress: () => 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function HomeScreen() {
   const router = useRouter();
-  const { isDarkMode: isDark } = useApp();
+  const { isDarkMode: isDark, toggleDarkMode, favorites, recentTracks, playbackProgress } = useApp();
+  const { earnedBadges } = useBadges();
+
+  const hoursListened = Math.floor(
+    Object.values(playbackProgress).reduce((sum, p) => sum + p.progressSeconds, 0) / 3600,
+  );
 
   // ── Firebase real-time data (sole source of truth) ──────────────────────
   const { categories: fbCats, loading: fbCatsLoading, error: fbCatError } = useCategories();
   const { cards: fbCards } = useAllCards();
 
   const [search,        setSearch]        = useState("");
-  const [menuOpen,      setMenuOpen]      = useState(false);
   const [dailyQuizOpen, setDailyQuizOpen] = useState(false);
 
-  // Use the SINGLE global audio player — no local sound instances
-  const { playTrack: globalPlay, togglePlay, isPlaying, currentTrack } = useAudio();
-
-  // Demo play: routes through the global AudioContext so it stops any current audio
-  const DEMO_TRACK = {
-    id: "__demo__",
-    title: "Demo Audio",
-    categoryId: "",
-    categoryName: "Sample",
-    duration: 0,
-    audioUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-    viewCount: 0,
-    isPremium: false,
-    sortOrder: 0,
-  };
-
-  function handlePlayAudio() {
-    if (currentTrack?.id === "__demo__") {
-      togglePlay(); // already loaded — just pause/resume
-    } else {
-      globalPlay(DEMO_TRACK); // stops whatever is playing, then loads demo
+  // Hidden admin entry: tap the logo 7× quickly → password-gated admin login.
+  const adminTapCount = useRef(0);
+  const adminTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function handleLogoTap() {
+    adminTapCount.current += 1;
+    if (adminTapTimer.current) clearTimeout(adminTapTimer.current);
+    if (adminTapCount.current >= 7) {
+      adminTapCount.current = 0;
+      router.push("/admin/login" as any);
+      return;
     }
+    adminTapTimer.current = setTimeout(() => { adminTapCount.current = 0; }, 1500);
   }
 
   // Staggered card animation refs
@@ -324,48 +284,28 @@ export default function HomeScreen() {
 
       {/* ─── HEADER ─── */}
       <View style={[styles.header, { backgroundColor: bg, borderBottomColor: isDark ? C.borderDark : C.border }]}>
-        <View style={styles.headerLeft}>
+        <Pressable style={styles.headerLeft} onPress={handleLogoTap}>
           <View style={[styles.logoMark, { backgroundColor: C.green }]}>
             <Text style={styles.logoMarkTxt}>🕌</Text>
           </View>
           <View>
-            <Text style={[styles.appName, { color: textMain }]}>Islamic Audio Hub</Text>
+            <Text style={[styles.appName, { color: textMain }]}>Hilal</Text>
             <Text style={[styles.appSub, { color: textSub }]}>செவிகள் சிறக்கட்டும்!</Text>
           </View>
-        </View>
+        </Pressable>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <CoinBadge isDark={isDark} />
           <TouchableOpacity
             style={[styles.menuBtn, { backgroundColor: isDark ? "#1a2e20" : C.greenLight, borderColor: isDark ? C.green + "44" : "#b8ddc0" }]}
-            onPress={() => setMenuOpen(v => !v)}
+            onPress={toggleDarkMode}
             activeOpacity={0.75}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle dark mode"
           >
-            <Ionicons name={menuOpen ? "close" : "menu"} size={22} color={C.green} />
+            <Ionicons name={isDark ? "sunny-outline" : "moon-outline"} size={20} color={C.green} />
           </TouchableOpacity>
         </View>
       </View>
-
-      {/* ─── DROPDOWN MENU ─── */}
-      {menuOpen && (
-        <View style={[styles.dropMenu, { backgroundColor: isDark ? "#111816" : "#fff", borderColor: isDark ? C.borderDark : C.border }]}>
-          {[
-            { icon: "person-circle-outline", label: "சுயவிவரம்", path: "/(tabs)/profile" },
-            { icon: "heart-outline", label: "பிடித்தவை", path: "/(tabs)/favorites" },
-            { icon: "shield-checkmark-outline", label: "Admin Panel", path: "/admin" },
-          ].map(item => (
-            <TouchableOpacity
-              key={item.path}
-              style={[styles.dropItem, { borderBottomColor: isDark ? C.borderDark : C.border }]}
-              onPress={() => { setMenuOpen(false); router.push(item.path as any); }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name={item.icon as any} size={18} color={C.green} />
-              <Text style={[styles.dropItemTxt, { color: textMain }]}>{item.label}</Text>
-              <Ionicons name="chevron-forward" size={14} color={textSub} />
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
 
       {/* ─── SEARCH BAR ─── */}
       <View style={[styles.searchWrap, { borderBottomColor: isDark ? C.borderDark : C.border }]}>
@@ -403,25 +343,6 @@ export default function HomeScreen() {
         {/* Daily Quiz Banner */}
         <DailyQuizBanner isDark={isDark} onPress={() => setDailyQuizOpen(true)} />
 
-        {/* ── Play Audio demo — routed through global AudioContext ─────── */}
-        {(() => {
-          const isDemoActive = currentTrack?.id === "__demo__";
-          const isDemo = isDemoActive && isPlaying;
-          return (
-            <TouchableOpacity
-              nativeID="playAudio"
-              onPress={handlePlayAudio}
-              activeOpacity={0.82}
-              style={[styles.audioBtn, { backgroundColor: isDemo ? C.goldBright : C.green }]}
-            >
-              <Ionicons name={isDemo ? "pause" : "play"} size={18} color="#fff" />
-              <Text style={styles.audioBtnTxt}>
-                {isDemo ? "⏸ Pause Audio" : "▶ Play Audio"}
-              </Text>
-            </TouchableOpacity>
-          );
-        })()}
-
         {/* Firebase error banner — shown only when Firestore is blocked */}
         {fbCatError && fbCats.length === 0 && (
           <View style={styles.fbErrorBanner}>
@@ -435,9 +356,6 @@ export default function HomeScreen() {
             </View>
           </View>
         )}
-
-        {/* Featured free track */}
-        {!loading && <FeaturedTrack tracks={allTracks} categories={categories} isDark={isDark} />}
 
         {/* Section heading */}
         <View style={styles.sectionRow}>
@@ -521,6 +439,69 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* ── Your progress + badges (relocated from the old Profile tab) ── */}
+        {!loading && !search && (
+          <View style={{ marginTop: 22 }}>
+            <View style={styles.sectionRow}>
+              <View style={[styles.sectionAccent, { backgroundColor: C.goldBright }]} />
+              <Text style={[styles.sectionTitle, { color: textMain }]}>🏅 உங்கள் முன்னேற்றம்</Text>
+              <View style={[styles.sectionBadge, { backgroundColor: "#c8a84b22" }]}>
+                <Text style={[styles.sectionBadgeTxt, { color: C.goldBright }]}>
+                  {earnedBadges.size}/{Object.keys(BADGE_DEFS).length}
+                </Text>
+              </View>
+            </View>
+
+            {/* Personal stat chips */}
+            <View style={styles.pStatsRow}>
+              {[
+                { icon: "heart", color: "#ef4444", num: favorites.length,      lbl: "பிடித்தவை" },
+                { icon: "headset", color: "#c8a84b", num: hoursListened,        lbl: "மணிகள்"   },
+                { icon: "musical-notes", color: "#60a5fa", num: recentTracks.length, lbl: "கேட்டவை" },
+              ].map(s => (
+                <View
+                  key={s.lbl}
+                  style={[styles.pStat, { backgroundColor: isDark ? C.cardBgDark : "#fff", borderColor: isDark ? C.borderDark : C.border }]}
+                >
+                  <Ionicons name={s.icon as any} size={20} color={s.color} />
+                  <Text style={[styles.pStatNum, { color: textMain }]}>{s.num}</Text>
+                  <Text style={[styles.pStatLbl, { color: textSub }]}>{s.lbl}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Badges — 2-column compact grid */}
+            <View style={styles.badgeGrid}>
+              {(Object.values(BADGE_DEFS) as typeof BADGE_DEFS[BadgeId][]).map(badge => {
+                const earned = earnedBadges.has(badge.id as BadgeId);
+                return (
+                  <View
+                    key={badge.id}
+                    style={[
+                      styles.badgeCard,
+                      {
+                        backgroundColor: earned ? (isDark ? badge.color + "22" : badge.color + "15") : (isDark ? C.cardBgDark : "#f5f5f5"),
+                        borderColor: earned ? badge.color + "55" : (isDark ? C.borderDark : "#e0e0e0"),
+                        opacity: earned ? 1 : 0.6,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.badgeIcon, { opacity: earned ? 1 : 0.35 }]}>
+                      {earned ? badge.icon : "🔒"}
+                    </Text>
+                    <Text
+                      style={[styles.badgeName, { color: earned ? badge.color : textSub }]}
+                      numberOfLines={1}
+                    >
+                      {badge.titleTa}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
         <View style={{ height: 140 }} />
       </ScrollView>
 
@@ -561,6 +542,9 @@ const styles = StyleSheet.create({
   },
 
   // Dropdown
+  menuBackdrop: {
+    position: "absolute", top: 0, left: 0, right: 0, bottom: 0, zIndex: 998,
+  },
   dropMenu: {
     position: "absolute", top: 72, right: 16, zIndex: 999,
     borderRadius: 14, borderWidth: 1,
@@ -723,6 +707,16 @@ const styles = StyleSheet.create({
   statNum: { fontSize: 20, fontWeight: "900" },
   statLbl: { fontSize: 10, marginTop: 2, textTransform: "uppercase", letterSpacing: 0.5 },
   statDiv: { width: 1, height: 36 },
+
+  // Personal progress (relocated from Profile)
+  pStatsRow: { flexDirection: "row", gap: 10, marginBottom: 12 },
+  pStat: { flex: 1, alignItems: "center", gap: 4, paddingVertical: 14, borderRadius: 14, borderWidth: 1 },
+  pStatNum: { fontSize: 20, fontWeight: "900" },
+  pStatLbl: { fontSize: 10, fontWeight: "600" },
+  badgeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  badgeCard: { width: CARD_WIDTH, flexDirection: "row", alignItems: "center", gap: 10, borderRadius: 14, borderWidth: 1.5, paddingVertical: 12, paddingHorizontal: 14 },
+  badgeIcon: { fontSize: 26 },
+  badgeName: { fontSize: 12, fontWeight: "800", flex: 1 },
 
   // Empty
   emptyBox: { alignItems: "center", paddingVertical: 40, gap: 10 },

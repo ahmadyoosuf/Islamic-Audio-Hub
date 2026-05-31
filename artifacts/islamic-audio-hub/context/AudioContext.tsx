@@ -25,6 +25,7 @@ interface AudioContextType {
   pause: () => void;
   seekTo: (seconds: number) => void;
   setPlaybackRate: (rate: number) => void;
+  stop: () => void;
   playNext: () => void;
   playPrev: () => void;
   addToQueue: (track: Track) => void;
@@ -47,7 +48,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [playbackRate, setPlaybackRateState] = useState(1.25);
+  const [playbackRate, setPlaybackRateState] = useState(1.0);
   const [queue, setQueue] = useState<Track[]>([]);
   const [playlist, setPlaylist] = useState<Track[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -190,6 +191,17 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Fully close the player: stop + unload audio, hide both full & mini players.
+  const stop = useCallback(async () => {
+    await cleanup();           // stops + unloads the sound, clears the progress timer
+    setIsExpanded(false);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setQueue([]);
+    setCurrentTrack(null);     // hides the mini player (AudioPlayer returns null)
+  }, []);
+
   const playNext = useCallback(() => {
     if (!currentTrack) return;
     if (queue.length > 0) {
@@ -239,6 +251,7 @@ export function AudioProvider({ children }: { children: React.ReactNode }) {
         pause,
         seekTo,
         setPlaybackRate,
+        stop,
         playNext,
         playPrev,
         addToQueue,

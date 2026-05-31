@@ -58,7 +58,7 @@ export default function AdminLoginScreen() {
         </View>
 
         <Text style={styles.title}>Admin Login</Text>
-        <Text style={styles.subtitle}>Islamic Audio Hub</Text>
+        <Text style={styles.subtitle}>Hilal</Text>
 
         <View style={styles.form}>
           <Text style={styles.label}>Email</Text>
